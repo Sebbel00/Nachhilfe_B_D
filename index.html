@@ -884,7 +884,8 @@ function renderWortliste(el) {
       <div class="reihe">
         <button id="edexport" class="zweit">Als Datei herunterladen</button>
         <input type="file" id="edimpdatei" accept=".json,application/json" hidden>
-        <button id="edimport" class="zweit">Datei importieren</button>
+        <button id="edergaenzen" class="zweit">Wörter aus Datei ergänzen</button>
+        <button id="edimport" class="zweit">Liste durch Datei ersetzen</button>
       </div>
       <p><input type="search" id="edfilter" placeholder="Wort suchen" value="${esc(ed.filter)}" style="width:100%"></p>
       <div id="edliste"></div>
@@ -902,16 +903,28 @@ function renderWortliste(el) {
     if (!confirm("Nicht gespeicherte Änderungen verwerfen und die Liste aus Firebase laden?")) return;
     localStorage.removeItem("bd_woerter_entwurf"); await woerterLaden(); entwurf = null; ed.status = ""; edLeeren(); renderWortliste(el);
   };
-  $("#edimport").onclick = () => $("#edimpdatei").click();
+  let importModus = "ersetzen";
+  $("#edimport").onclick = () => { importModus = "ersetzen"; $("#edimpdatei").click(); };
+  $("#edergaenzen").onclick = () => { importModus = "ergaenzen"; $("#edimpdatei").click(); };
   $("#edimpdatei").onchange = async ev => {
     const f = ev.target.files[0]; if (!f) return;
     try {
       const j = JSON.parse(await f.text());
       const liste = (Array.isArray(j) ? j : j.woerter || []).map(eintragNormal).filter(Boolean);
       if (!liste.length) throw new Error("leer");
-      if (!confirm(`Die aktuelle Liste (${entwurf.length} Wörter) durch die Datei (${liste.length} Wörter) ersetzen?`)) return;
-      entwurf = liste; edLeeren(); await entwurfSpeichern();
+      if (importModus === "ergaenzen") {
+        const vorhanden = new Set(entwurf.map(w => w.wort.toLowerCase()));
+        const neu = liste.filter(w => !vorhanden.has(w.wort.toLowerCase()));
+        if (!neu.length) { ed.status = "Alle Wörter aus der Datei stehen schon in der Liste."; ev.target.value = ""; renderWortliste(el); return; }
+        if (!confirm(`${neu.length} neue Wörter zur Liste hinzufügen?`)) { ev.target.value = ""; return; }
+        entwurf = [...entwurf, ...neu];
+      } else {
+        if (!confirm(`Die aktuelle Liste (${entwurf.length} Wörter) durch die Datei (${liste.length} Wörter) ersetzen?`)) { ev.target.value = ""; return; }
+        entwurf = liste;
+      }
+      edLeeren(); await entwurfSpeichern();
     } catch (e) { ed.status = "Die Datei ist keine gültige Wortliste."; }
+    ev.target.value = "";
     renderWortliste(el);
   };
   renderEdBuchstaben();
