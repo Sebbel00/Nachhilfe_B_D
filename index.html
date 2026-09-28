@@ -125,7 +125,7 @@
   label.inline{flex-direction:row;align-items:center;gap:8px;margin:0}
   label.check{flex-direction:row;align-items:center;gap:10px;font-weight:400;font-size:1.1rem}
   label.check input{width:22px;height:22px}
-  input[type=text],input[type=search],select{font-family:inherit;font-size:1.05rem;padding:9px 12px;border-radius:10px;border:2px solid var(--rand);background:#fff;color:var(--tinte)}
+  input[type=text],input[type=search],input[type=number],select{font-family:inherit;font-size:1.05rem;padding:9px 12px;border-radius:10px;border:2px solid var(--rand);background:#fff;color:var(--tinte)}
   .hinweis{color:var(--leise);font-size:.95rem;margin:6px 0}
   .ed-buchstaben{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px;min-height:54px;align-items:center}
   .ed-b{width:46px;height:54px;border-radius:10px;font-size:1.7rem;background:var(--papier);border:2px solid var(--rand)}
@@ -169,8 +169,6 @@ const FIREBASE_CONFIG = {
 const LEHRER_PIN = "2609";        // PIN für den Lehrerbereich (Knopf 🧑‍🏫 oben rechts)
 const SAMMLUNG   = "bd_trainer";  // Name der Firestore-Sammlung
 const WORT_SAMMLUNG = "bd_woerter"; // Firestore-Sammlung für die Wortliste (Dokument "liste")
-const FREI_FENSTER = 20;          // Automatisch freischalten: von den letzten 20 Wörtern einer Stufe …
-const FREI_ZIEL    = 17;          // … müssen 17 richtig sein (85 %)
 // =================================================
 
 const FB_VERSION = "10.12.2";
@@ -248,13 +246,16 @@ async function woerterLaden() {
 }
 
 // ---------- Lernstand ----------
-const leererStand = () => ({ version: 1, reset: 0, log: [], einstellungen: { stufen: [1], maxSchwierigkeit: 1, rundenLaenge: 10, auto: true, t: 0 } });
+const leererStand = () => ({ version: 1, reset: 0, log: [], einstellungen: { stufen: [1], maxSchwierigkeit: 1, rundenLaenge: 10, auto: true,
+  freiFenster: 20, freiQuote: { 2: 85, 3: 85 }, freiAb: 0, t: 0 } });
 function normalisieren(s) {
   const l = leererStand();
   if (!s || typeof s !== "object") return l;
   const e = Object.assign(l.einstellungen, s.einstellungen || {});
   e.stufen = (Array.isArray(e.stufen) ? e.stufen : [1]).map(Number).filter(n => [1, 2, 3].includes(n));
   if (!e.stufen.length) e.stufen = [1];
+  e.freiQuote = Object.assign({ 2: 85, 3: 85 }, e.freiQuote || {});
+  e.freiFenster = Math.min(Math.max(Number(e.freiFenster) || 20, 5), 50);
   return { version: 1, reset: Number(s.reset) || 0, log: Array.isArray(s.log) ? s.log : [], einstellungen: e };
 }
 function zusammenfuehren(a, b) {
@@ -353,10 +354,14 @@ async function anmelden(name) {
   await hochladen();
   if (!runde && $("#lehrer").classList.contains("hidden")) zeigeStart();
 }
-// Fortschritt zum Freischalten von Stufe n (zählt die letzten Antworten in Stufe n-1)
+// Freischalten von Stufe n: von den letzten X Antworten in Stufe n-1 müssen Y % richtig sein
+function zielFuer(n, e = stand.einstellungen) {
+  return Math.max(1, Math.ceil(e.freiFenster * (Number(e.freiQuote[n]) || 85) / 100));
+}
 function fortschrittFuer(n) {
-  const letzte = stand.log.filter(e => e.st === n - 1).slice(-FREI_FENSTER);
-  return Math.min(letzte.filter(e => e.ok).length, FREI_ZIEL);
+  const e = stand.einstellungen;
+  const letzte = stand.log.filter(x => x.st === n - 1 && x.t > (e.freiAb || 0)).slice(-e.freiFenster);
+  return Math.min(letzte.filter(x => x.ok).length, zielFuer(n));
 }
 function pruefeFreischaltung() {
   const e = stand.einstellungen;
@@ -364,7 +369,7 @@ function pruefeFreischaltung() {
   let neu = null;
   for (const n of [2, 3]) {
     if (e.stufen.includes(n) || !e.stufen.includes(n - 1)) continue;
-    if (fortschrittFuer(n) >= FREI_ZIEL) { e.stufen = [...e.stufen, n].sort(); e.t = Date.now(); neu = n; }
+    if (fortschrittFuer(n) >= zielFuer(n)) { e.stufen = [...e.stufen, n].sort(); e.t = Date.now(); neu = n; }
   }
   if (neu) { lokalSpeichern(schueler, stand); spaeterHochladen(); }
   return neu;
@@ -373,9 +378,9 @@ function sperrHinweis(n) {
   const e = stand.einstellungen;
   if (!e.auto) return `<span class="leise">Wird von deinem Lehrer freigeschaltet.</span>`;
   if (!e.stufen.includes(n - 1)) return `<span class="leise">Kommt nach Stufe ${n - 1}.</span>`;
-  const f = fortschrittFuer(n), fehlt = FREI_ZIEL - f;
+  const ziel = zielFuer(n), f = fortschrittFuer(n), fehlt = ziel - f;
   return `<span class="leise">Noch ${fehlt} richtige ${fehlt === 1 ? "Wort" : "Wörter"} in Stufe ${n - 1}</span>
-    <div class="mini-balken"><div style="width:${Math.round(f / FREI_ZIEL * 100)}%"></div></div>`;
+    <div class="mini-balken"><div style="width:${Math.round(f / ziel * 100)}%"></div></div>`;
 }
 function zeigeStart() {
   runde = null;
@@ -504,7 +509,7 @@ function pruefeEingabe() {
   const w = aktuell();
   const inp = $("#eingabe").value.trim();
   if (!inp) return;
-  const ok = inp.toLowerCase() === w.wort.toLowerCase();
+  const ok = inp === w.wort;   // Groß- und Kleinschreibung zählt
   if (runde.versuch === 1) {
     if (ok) { protokoll(w, true, ([...inp][w.index] || "").toLowerCase(), inp); zeigeRueckmeldung(true, w, false); }
     else { runde.ersteEingabe = inp; runde.versuch = 2; markiereFehler(inp, w); }
@@ -519,11 +524,12 @@ function markiereFehler(inp, w) {
   let html = "";
   for (let i = 0; i < n; i++) {
     const c = a[i];
-    const falsch = !c || !z[i] || c.toLowerCase() !== z[i].toLowerCase();
+    const falsch = !c || !z[i] || c !== z[i];
     html += `<span class="buchstabe ${falsch ? "fehler" : ""}">${c ? esc(c) : "&nbsp;"}</span>`;
   }
   $("#markierung").innerHTML = html;
-  $("#rueckmeldung").innerHTML = `<p>Fast! Schau dir die roten Stellen nochmal an.</p>`;
+  const nurGross = inp.toLowerCase() === w.wort.toLowerCase();
+  $("#rueckmeldung").innerHTML = `<p>${nurGross ? "Fast! Achte auf Groß- und Kleinschreibung." : "Fast! Schau dir die roten Stellen nochmal an."}</p>`;
   const bl = $("#blatt"); bl.classList.remove("wackeln"); void bl.offsetWidth; bl.classList.add("wackeln");
   $("#eingabe").focus();
 }
@@ -655,6 +661,7 @@ function renderAuswertung(el) {
   const richtig = log.filter(e => e.ok).length, falsch = log.length - richtig;
   const bStattD = log.filter(e => !e.ok && e.z === "d" && e.a === "b").length;
   const dStattB = log.filter(e => !e.ok && e.z === "b" && e.a === "d").length;
+  const grossKlein = log.filter(e => !e.ok && e.st === 3 && e.e && e.e !== e.w && e.e.toLowerCase() === e.w.toLowerCase()).length;
   const woerter = {};
   for (const e of log) {
     const x = woerter[e.w] || (woerter[e.w] = { r: 0, f: 0, v: [], fehl: [] });
@@ -686,7 +693,8 @@ function renderAuswertung(el) {
         <div class="kachel"><strong>${log.length ? Math.round(richtig / log.length * 100) + " %" : "–"}</strong>richtig</div>
         <div class="kachel"><strong>${bStattD}</strong>b statt d</div>
         <div class="kachel"><strong>${dStattB}</strong>d statt b</div>
-        <div class="kachel"><strong>${falsch - bStattD - dStattB}</strong>andere Fehler (Schreiben)</div>
+        <div class="kachel"><strong>${grossKlein}</strong>nur Groß-/Kleinschreibung</div>
+        <div class="kachel"><strong>${falsch - bStattD - dStattB - grossKlein}</strong>andere Fehler (Schreiben)</div>
       </div>
     </div>
     <div class="box scroll"><h3>Nach Position im Wort</h3>
@@ -717,10 +725,19 @@ function renderEinstellungen(el) {
   el.innerHTML = `
     <div class="box"><h3>Freigeschaltete Stufen für ${esc(L.id)}</h3>
       ${[1, 2, 3].map(n => `<label class="check"><input type="checkbox" value="${n}" class="st" ${e.stufen.includes(n) ? "checked" : ""}> Stufe ${n}: ${STUFEN[n].titel}</label>`).join("")}
+      <p class="hinweis">Wenn du hier eine Stufe wieder sperrst, beginnt der Fortschritt zum Freischalten von vorn.</p>
+      <button id="stufenreset" class="zweit">Stufen zurücksetzen (nur Stufe 1)</button>
     </div>
     <div class="box"><h3>Automatisch freischalten</h3>
-      <label class="check"><input type="checkbox" id="auto" ${e.auto ? "checked" : ""}> Nächste Stufe freischalten, wenn ${FREI_ZIEL} der letzten ${FREI_FENSTER} Wörter richtig sind</label>
-      <p class="hinweis">Ausgeschaltet schaltest du die Stufen nur oben von Hand frei.</p>
+      <label class="check"><input type="checkbox" id="auto" ${e.auto ? "checked" : ""}> Nächste Stufe automatisch freischalten</label>
+      <div class="reihe">
+        <label>Gezählt werden die letzten <input type="number" id="fenster" min="5" max="50" value="${e.freiFenster}" style="width:6em"> Wörter</label>
+      </div>
+      <div class="reihe">
+        <label>Für Stufe 2 nötig (%) <input type="number" id="q2" min="10" max="100" value="${e.freiQuote[2]}" style="width:6em"></label>
+        <label>Für Stufe 3 nötig (%) <input type="number" id="q3" min="10" max="100" value="${e.freiQuote[3]}" style="width:6em"></label>
+      </div>
+      <p class="hinweis" id="zielinfo"></p>
     </div>
     <div class="box"><h3>Wortschwierigkeit</h3>
       <select id="maxs">
@@ -732,13 +749,35 @@ function renderEinstellungen(el) {
       <select id="rl">${[5, 10, 15, 20].map(n => `<option value="${n}" ${e.rundenLaenge === n ? "selected" : ""}>${n}</option>`).join("")}</select>
     </div>
     <div class="reihe"><button id="einsave" class="haupt">Einstellungen speichern</button><span id="einmeld" class="hinweis"></span></div>`;
-  $("#einsave").onclick = async () => {
-    const stufen = [...el.querySelectorAll(".st:checked")].map(c => +c.value);
-    if (!stufen.length) { $("#einmeld").textContent = "Mindestens eine Stufe muss freigeschaltet sein."; return; }
-    L.stand.einstellungen = { stufen, maxSchwierigkeit: +$("#maxs").value, rundenLaenge: +$("#rl").value, auto: $("#auto").checked, t: Date.now() };
+
+  const werte = () => {
+    const zahl = (id, min, max, std) => Math.min(Math.max(Math.round(Number($(id).value)) || std, min), max);
+    return { freiFenster: zahl("#fenster", 5, 50, 20), freiQuote: { 2: zahl("#q2", 10, 100, 85), 3: zahl("#q3", 10, 100, 85) } };
+  };
+  const zielInfo = () => {
+    const w = werte();
+    $("#zielinfo").textContent = `Stufe 2: ${zielFuer(2, w)} von ${w.freiFenster} Wörtern aus Stufe 1 richtig · Stufe 3: ${zielFuer(3, w)} von ${w.freiFenster} Wörtern aus Stufe 2 richtig`;
+  };
+  ["#fenster", "#q2", "#q3"].forEach(id => $(id).oninput = zielInfo);
+  zielInfo();
+
+  const speichern = async neu => {
+    L.stand.einstellungen = { ...L.stand.einstellungen, ...neu, t: Date.now() };
     $("#einmeld").textContent = "speichert …";
     const ok = await lehrerStandSpeichern();
+    renderEinstellungen(el);
     $("#einmeld").textContent = ok ? "Gespeichert." : "Auf diesem Gerät gespeichert (keine Verbindung zu Firebase).";
+  };
+  $("#stufenreset").onclick = () => {
+    if (!confirm(`Stufen von „${L.id}“ zurücksetzen? Danach ist nur Stufe 1 frei und der Fortschritt beginnt von vorn. Die Auswertung bleibt erhalten.`)) return;
+    speichern({ stufen: [1], freiAb: Date.now() });
+  };
+  $("#einsave").onclick = () => {
+    const stufen = [...el.querySelectorAll(".st:checked")].map(c => +c.value);
+    if (!stufen.length) { $("#einmeld").textContent = "Mindestens eine Stufe muss freigeschaltet sein."; return; }
+    const gesperrt = e.stufen.some(n => !stufen.includes(n));
+    speichern({ stufen, maxSchwierigkeit: +$("#maxs").value, rundenLaenge: +$("#rl").value, auto: $("#auto").checked,
+      ...werte(), ...(gesperrt ? { freiAb: Date.now() } : {}) });
   };
 }
 
