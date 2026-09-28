@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>b oder d?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --papier:#EEF3F8; --blatt:#FFFFFF; --tinte:#1F2A44; --leise:#5F6B82;
+    --fueller:#2456A6; --fueller-h:#E4ECF8; --linie:#9CC3E6; --karo:#E3EEF8;
+    --gut:#2F8F5B; --gut-h:#E3F3EA; --rot:#C8413B; --rot-h:#FBE7E5; --rand:#D5DEE9;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+    box-sizing:border-box;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  body{background:var(--papier);color:var(--tinte);font-family:"Andika",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.4;-webkit-tap-highlight-color:transparent}
+  button{font-family:inherit;touch-action:manipulation;cursor:pointer;border:none;color:inherit}
+  button:disabled{opacity:.45;cursor:default}
+  button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--fueller);outline-offset:2px}
+  .hidden{display:none!important}
+
+  #app{max-width:820px;margin:0 auto;padding:12px 20px 40px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  h1{font-size:2.1rem;margin:6px 0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  #sync{font-size:.85rem;color:var(--leise);text-align:right}
+  #sync.ok{color:var(--gut)} #sync.warn{color:var(--rot)}
+
+  .haupt{background:var(--fueller);color:#fff;border-radius:14px;padding:14px 22px;font-size:1.15rem;font-weight:700}
+  .zweit{background:transparent;color:var(--fueller);border:2px solid var(--fueller);border-radius:14px;padding:12px 20px;font-size:1.05rem;font-weight:700}
+  .reihe{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .zentriert{justify-content:center}
+  .zwischen{justify-content:space-between}
+  .leise{color:var(--leise)}
+  .fehlertext{color:var(--rot)}
+
+  /* Heftseite */
+  .blatt{position:relative;background:var(--blatt) repeating-linear-gradient(to bottom,transparent 0 31px,var(--karo) 31px 32px);
+    border-radius:6px 20px 20px 6px;padding:26px 22px 26px 46px;text-align:center;border:3px solid transparent;
+    box-shadow:0 2px 0 var(--rand),0 10px 28px rgba(31,42,68,.08);transition:border-color .2s,background-color .2s}
+  .blatt::before{content:"";position:absolute;top:0;bottom:0;left:28px;width:2px;background:#E9A3A0}
+  .blatt.richtig{border-color:var(--gut);background-color:var(--gut-h)}
+  .blatt.falsch{border-color:var(--rot);background-color:var(--rot-h)}
+  .wackeln{animation:wackeln .4s}
+  @keyframes wackeln{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+  @media (prefers-reduced-motion:reduce){.wackeln{animation:none}.blatt{transition:none}}
+
+  .emoji{font-size:64px;line-height:1.1;min-height:1em}
+  .hoeren{background:var(--fueller-h);color:var(--fueller);border-radius:999px;padding:10px 22px;font-size:1.1rem;font-weight:700;margin:10px 0 4px}
+  .frage{font-size:1.3rem;color:var(--leise);margin:8px 0 14px}
+
+  /* Wort auf der Grundlinie */
+  .wort{display:inline-flex;justify-content:center;flex-wrap:wrap;gap:3px;font-size:clamp(44px,10vw,76px);line-height:1.25;
+    padding:0 18px;border-bottom:3px solid var(--linie);margin-bottom:24px;min-height:1.35em;min-width:3em}
+  .wort.klein{font-size:clamp(30px,7vw,50px)}
+  .buchstabe{display:inline-block;min-width:.55em}
+  .buchstabe.luecke{min-width:.8em;background:var(--fueller-h);border-radius:10px;color:transparent}
+  .buchstabe.punkt{color:#B9C6D6}
+  .buchstabe.ziel{color:var(--fueller);font-weight:700;background:var(--fueller-h);border-radius:10px}
+  .buchstabe.fehler{color:var(--rot);background:var(--rot-h);border-radius:10px;box-shadow:inset 0 -4px 0 var(--rot)}
+
+  .bd{display:flex;justify-content:center;gap:26px;margin-top:4px}
+  .bd-knopf{width:min(36vw,170px);aspect-ratio:1;border-radius:24px;background:#fff;border:3px solid var(--rand);
+    font-size:clamp(66px,15vw,112px);line-height:1;box-shadow:0 5px 0 var(--rand)}
+  .bd-knopf:active:not(:disabled){transform:translateY(4px);box-shadow:0 1px 0 var(--rand)}
+
+  .gross-eingabe{font-family:inherit;font-size:clamp(30px,7vw,48px);text-align:center;width:100%;max-width:460px;padding:10px 12px;
+    border-radius:14px;border:3px solid var(--rand);background:#fff;color:var(--tinte);margin:6px 0 16px}
+  .gross-eingabe:focus{outline:none;border-color:var(--fueller)}
+  #rueckmeldung p{font-size:1.25rem;margin:10px 0 14px}
+
+  .leiste{display:flex;align-items:center;gap:12px;margin:10px 0 16px}
+  .fortschritt{flex:1;height:14px;background:var(--rand);border-radius:99px;overflow:hidden}
+  .fortschritt div{height:100%;background:var(--gut);transition:width .3s}
+  .x-knopf{background:transparent;font-size:1.5rem;color:var(--leise);padding:4px 10px}
+  .zaehler{color:var(--leise);font-weight:700;min-width:3.5em;text-align:right}
+
+  .gruss{font-size:1.7rem;margin:14px 0 2px}
+  .stufen{display:grid;gap:12px;margin:18px 0 22px}
+  .stufe{display:flex;align-items:center;gap:16px;background:#fff;border-radius:18px;padding:16px 20px;text-align:left;font-size:1.1rem;border:3px solid var(--rand)}
+  .stufe .ico{font-size:40px;width:52px;text-align:center}
+  .stufe strong{display:block;font-size:1.35rem}
+  .sterne{font-size:56px}
+
+  /* Modal */
+  #modal{position:fixed;inset:0;background:rgba(31,42,68,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60}
+  .modal-box{background:#fff;border-radius:20px;padding:22px;width:100%;max-width:360px}
+  .modal-box h2{margin:0 0 12px}
+  .modal-box input{width:100%;font-family:inherit;font-size:1.6rem;text-align:center;letter-spacing:.3em;padding:10px;border-radius:12px;border:2px solid var(--rand);margin-bottom:6px}
+
+  /* Lehrerbereich */
+  #lehrer{position:fixed;inset:0;background:var(--papier);overflow-y:auto;z-index:50;
+    padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 40px)}
+  .lehrer-innen{max-width:980px;margin:0 auto}
+  .lehrer-innen h2{margin:6px 0}
+  .tabs{display:flex;gap:6px;overflow-x:auto;margin:12px 0}
+  .tab{background:#fff;border-radius:12px;padding:10px 16px;font-size:1rem;font-weight:700;color:var(--leise);white-space:nowrap;border:2px solid var(--rand)}
+  .tab.aktiv{background:var(--tinte);color:#fff;border-color:var(--tinte)}
+  .box{background:#fff;border-radius:16px;padding:16px 18px;margin-bottom:14px;border:2px solid var(--rand)}
+  .box h3{margin:0 0 10px;font-size:1.15rem}
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:.98rem}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--rand);text-align:left;white-space:nowrap}
+  th{color:var(--leise);font-weight:700}
+  .balken{height:10px;background:var(--rot-h);border-radius:99px;min-width:90px;overflow:hidden}
+  .balken div{height:100%;background:var(--gut)}
+  .verlauf span{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:3px;vertical-align:middle}
+  .p-ok{background:var(--gut)} .p-f{background:var(--rot)}
+  .kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .kachel{background:var(--papier);border-radius:12px;padding:12px}
+  .kachel strong{display:block;font-size:1.6rem}
+  label{display:flex;flex-direction:column;gap:4px;font-weight:700;margin-bottom:10px}
+  label.inline{flex-direction:row;align-items:center;gap:8px;margin:0}
+  label.check{flex-direction:row;align-items:center;gap:10px;font-weight:400;font-size:1.1rem}
+  label.check input{width:22px;height:22px}
+  input[type=text],input[type=search],select{font-family:inherit;font-size:1.05rem;padding:9px 12px;border-radius:10px;border:2px solid var(--rand);background:#fff;color:var(--tinte)}
+  .hinweis{color:var(--leise);font-size:.95rem;margin:6px 0}
+  .ed-buchstaben{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px;min-height:54px;align-items:center}
+  .ed-b{width:46px;height:54px;border-radius:10px;font-size:1.7rem;background:var(--papier);border:2px solid var(--rand)}
+  .ed-b:disabled{opacity:.3}
+  .ed-b.aktiv{background:var(--fueller);color:#fff;border-color:var(--fueller)}
+  .ed-zeile{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--rand);cursor:pointer}
+  .ed-zeile:hover{background:var(--papier)}
+  .ed-emoji{width:30px;text-align:center;font-size:1.3rem}
+  .ed-wort{flex:1;font-size:1.3rem}
+  .ed-wort b{color:var(--fueller);background:var(--fueller-h);border-radius:6px;padding:0 2px}
+  .tag{background:var(--papier);border-radius:8px;padding:3px 8px;font-size:.85rem;color:var(--leise)}
+  .ed-del{background:transparent;color:var(--rot);font-size:1.2rem;padding:6px 10px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="titel">b oder d?</h1>
+    <span id="sync"></span>
+  </header>
+  <main id="screen"></main>
+</div>
+<div id="lehrer" class="hidden"></div>
+<div id="modal" class="hidden"></div>
+
+<script type="module">
+// ================= KONFIGURATION =================
+// Firebase-Daten aus der Firebase-Konsole eintragen (Projekteinstellungen > Deine Apps > Web-App).
+// Bleibt apiKey leer, läuft alles nur lokal auf dem Gerät.
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+const LEHRER_PIN = "1234";        // PIN für den Lehrerbereich (langer Druck auf die Überschrift)
+const SAMMLUNG   = "bd_trainer";  // Name der Firestore-Sammlung
+// =================================================
+
+const FB_VERSION = "10.12.2";
+const LOG_MAX = 3000;
+const POS_NAME = { anfang: "Anfang", mitte: "Mitte", ende: "Ende" };
+const STUFEN = {
+  1: { ico: "👂", titel: "Hören",     text: "Hör genau hin: b oder d?" },
+  2: { ico: "👀", titel: "Lesen",     text: "Welcher Buchstabe fehlt?" },
+  3: { ico: "✏️", titel: "Schreiben", text: "Schreib das ganze Wort." }
+};
+const LOB = ["Super!", "Richtig!", "Klasse!", "Genau!", "Stark!", "Prima!"];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const screen = () => document.getElementById("screen");
+const heute0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const zeichen = w => [...w.wort];
+const zielBuchstabe = w => zeichen(w)[w.index];
+
+let db = null, fs = null;
+let WOERTER = [], woerterFehler = "";
+let schueler = null, anzeigeName = "", stand = null, runde = null;
+
+// ---------- Firebase ----------
+async function firebaseStarten() {
+  if (!FIREBASE_CONFIG.apiKey) return false;
+  try {
+    const appMod = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-app.js`);
+    fs = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-firestore.js`);
+    db = fs.getFirestore(appMod.initializeApp(FIREBASE_CONFIG));
+    return true;
+  } catch (e) { console.error(e); db = null; return false; }
+}
+
+// ---------- Wortliste ----------
+function positionVon(wort, i) { const n = [...wort].length; return i === 0 ? "anfang" : (i === n - 1 ? "ende" : "mitte"); }
+function schwVorschlag(wort, i) {
+  if (/b/i.test(wort) && /d/i.test(wort)) return 3;
+  return { anfang: 1, mitte: 2, ende: 3 }[positionVon(wort, i)];
+}
+function eintragNormal(w) {
+  if (!w || typeof w.wort !== "string") return null;
+  const z = [...w.wort];
+  if (!Number.isInteger(w.index) || !/[bd]/i.test(z[w.index] || "")) return null;
+  const e = { wort: w.wort, index: w.index, position: positionVon(w.wort, w.index),
+    schwierigkeit: [1, 2, 3].includes(w.schwierigkeit) ? w.schwierigkeit : schwVorschlag(w.wort, w.index) };
+  if (w.emoji) e.emoji = String(w.emoji);
+  return e;
+}
+async function woerterLaden() {
+  try {
+    const r = await fetch("woerter.json", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    WOERTER = (Array.isArray(j) ? j : j.woerter || []).map(eintragNormal).filter(Boolean);
+    if (!WOERTER.length) woerterFehler = "Die Wortliste ist leer.";
+  } catch (e) {
+    WOERTER = [];
+    woerterFehler = "woerter.json konnte nicht geladen werden. Die Seite muss über die Internetadresse geöffnet werden, nicht als Datei.";
+  }
+}
+
+// ---------- Lernstand ----------
+const leererStand = () => ({ version: 1, reset: 0, log: [], einstellungen: { stufen: [1], maxSchwierigkeit: 1, rundenLaenge: 10, t: 0 } });
+function normalisieren(s) {
+  const l = leererStand();
+  if (!s || typeof s !== "object") return l;
+  const e = Object.assign(l.einstellungen, s.einstellungen || {});
+  e.stufen = (Array.isArray(e.stufen) ? e.stufen : [1]).map(Number).filter(n => [1, 2, 3].includes(n));
+  if (!e.stufen.length) e.stufen = [1];
+  return { version: 1, reset: Number(s.reset) || 0, log: Array.isArray(s.log) ? s.log : [], einstellungen: e };
+}
+function zusammenfuehren(a, b) {
+  a = normalisieren(a); b = normalisieren(b);
+  const reset = Math.max(a.reset, b.reset);
+  const map = new Map();
+  for (const e of [...a.log, ...b.log]) if (e && e.t > reset) map.set(e.t + "|" + e.w + "|" + e.st, e);
+  const log = [...map.values()].sort((x, y) => x.t - y.t).slice(-LOG_MAX);
+  const einstellungen = (b.einstellungen.t || 0) > (a.einstellungen.t || 0) ? b.einstellungen : a.einstellungen;
+  return { version: 1, reset, log, einstellungen };
+}
+function lokalLaden(id) {
+  try { return normalisieren(JSON.parse(localStorage.getItem("bd_stand_" + id))); } catch (e) { return leererStand(); }
+}
+function lokalSpeichern(id, s) { try { localStorage.setItem("bd_stand_" + id, JSON.stringify(s)); } catch (e) {} }
+
+async function syncStand(id, s) {
+  lokalSpeichern(id, s);
+  if (!db) return { s, ok: false };
+  try {
+    const ref = fs.doc(db, SAMMLUNG, id);
+    const snap = await fs.getDoc(ref);
+    if (snap.exists()) s = zusammenfuehren(s, snap.data());
+    await fs.setDoc(ref, { ...s, aktualisiert: Date.now() });
+    lokalSpeichern(id, s);
+    return { s, ok: true };
+  } catch (e) { console.error(e); return { s, ok: false }; }
+}
+function zeigeSync(text, cls = "") { const el = $("#sync"); el.textContent = text; el.className = cls; }
+async function hochladen() {
+  if (!schueler) return false;
+  zeigeSync("speichert …");
+  const r = await syncStand(schueler, stand);
+  stand = zusammenfuehren(stand, r.s);   // Antworten, die während des Speicherns dazukamen, bleiben erhalten
+  lokalSpeichern(schueler, stand);
+  if (r.ok) zeigeSync("✓ gespeichert", "ok");
+  else zeigeSync(db ? "offline – auf dem Gerät gespeichert" : "nur auf diesem Gerät", "warn");
+  return r.ok;
+}
+let hochTimer = null;
+function spaeterHochladen() { clearTimeout(hochTimer); hochTimer = setTimeout(hochladen, 2500); }
+
+function wortStatistik(log) {
+  const m = {};
+  for (const e of log) {
+    const s = m[e.w] || (m[e.w] = { s: 0, r: 0, f: 0, last: 0 });
+    if (e.ok) { s.r++; s.s = Math.min(s.s + 1, 5); } else { s.f++; s.s = Math.max(s.s - 2, -3); }
+    s.last = e.t;
+  }
+  return m;
+}
+
+// ---------- Sprache ----------
+let stimme = null;
+function stimmeWaehlen() {
+  const v = speechSynthesis.getVoices();
+  stimme = v.find(x => x.lang === "de-DE" && /Anna|Petra|Helena/i.test(x.name)) || v.find(x => x.lang && x.lang.startsWith("de")) || null;
+}
+if ("speechSynthesis" in window) { stimmeWaehlen(); speechSynthesis.onvoiceschanged = stimmeWaehlen; }
+function sprich(text) {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "de-DE"; u.rate = 0.8;
+  if (stimme) u.voice = stimme;
+  speechSynthesis.speak(u);
+}
+
+// ---------- Anmeldung & Start ----------
+function idAus(name) {
+  return name.trim().toLowerCase().replace(/ß/g, "ss").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "schueler";
+}
+function zeigeAnmeldung() {
+  runde = null;
+  screen().innerHTML = `
+    <div class="blatt">
+      <div class="emoji">👋</div>
+      <p class="gruss">Wie heißt du?</p>
+      <input id="name" class="gross-eingabe" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
+        value="${esc(localStorage.getItem("bd_name") || "")}">
+      <div><button id="los" class="haupt">Los geht's</button></div>
+    </div>`;
+  const los = () => { const n = $("#name").value.trim(); if (n) anmelden(n); };
+  $("#los").onclick = los;
+  $("#name").onkeydown = e => { if (e.key === "Enter") los(); };
+}
+async function anmelden(name) {
+  anzeigeName = name.trim();
+  schueler = idAus(anzeigeName);
+  localStorage.setItem("bd_schueler", schueler);
+  localStorage.setItem("bd_name", anzeigeName);
+  stand = lokalLaden(schueler);
+  zeigeStart();
+  await hochladen();
+  if (!runde && $("#lehrer").classList.contains("hidden")) zeigeStart();
+}
+function zeigeStart() {
+  runde = null;
+  const e = stand.einstellungen;
+  screen().innerHTML = `
+    <p class="gruss">Hallo ${esc(anzeigeName)}!</p>
+    <p class="leise">Was möchtest du heute üben?</p>
+    ${woerterFehler ? `<p class="fehlertext">${esc(woerterFehler)}</p>` : ""}
+    <div class="stufen">
+      ${[1, 2, 3].map(n => {
+        const s = STUFEN[n], frei = e.stufen.includes(n);
+        return `<button class="stufe" data-stufe="${n}" ${frei ? "" : "disabled"}>
+          <span class="ico">${frei ? s.ico : "🔒"}</span>
+          <span><strong>Stufe ${n}: ${s.titel}</strong>${s.text}</span></button>`;
+      }).join("")}
+    </div>
+    <div class="reihe zentriert">
+      <button id="speichern" class="haupt">💾 Stand speichern</button>
+      <button id="wechseln" class="zweit">Name ändern</button>
+    </div>`;
+  screen().querySelectorAll(".stufe").forEach(b => b.onclick = () => starteRunde(+b.dataset.stufe));
+  $("#speichern").onclick = hochladen;
+  $("#wechseln").onclick = () => { localStorage.removeItem("bd_schueler"); schueler = null; stand = null; zeigeSync(""); zeigeAnmeldung(); };
+}
+
+// ---------- Runde ----------
+function rundeZiehen() {
+  const e = stand.einstellungen;
+  const pool = WOERTER.filter(w => w.schwierigkeit <= e.maxSchwierigkeit);
+  const stat = wortStatistik(stand.log);
+  const jetzt = Date.now();
+  const kandidaten = pool.map(w => {
+    const s = stat[w.wort];
+    let g = s ? 6 - s.s : 5;                          // unsichere Wörter häufiger, sichere seltener (aber nie gar nicht)
+    if (s && jetzt - s.last < 5 * 60 * 1000) g *= 0.4; // gerade eben geübt → etwas seltener
+    return { w, g };
+  });
+  const liste = [];
+  const n = Math.min(e.rundenLaenge, kandidaten.length);
+  for (let i = 0; i < n; i++) {
+    const summe = kandidaten.reduce((a, k) => a + k.g, 0);
+    let r = Math.random() * summe, idx = 0;
+    for (; idx < kandidaten.length - 1; idx++) { r -= kandidaten[idx].g; if (r <= 0) break; }
+    liste.push(kandidaten[idx].w);
+    kandidaten.splice(idx, 1);
+  }
+  return liste;
+}
+function starteRunde(stufe) {
+  const liste = rundeZiehen();
+  if (!liste.length) { alert("Es sind keine passenden Wörter vorhanden."); return; }
+  runde = { stufe, liste, pos: 0, richtig: 0, gesamt: 0, versuch: 1, ersteEingabe: "", wiederholt: new Set() };
+  zeigeAufgabe();
+}
+const aktuell = () => runde.liste[runde.pos];
+
+function wortHTML(w, modus) {
+  return zeichen(w).map((c, i) => {
+    if (i === w.index) return modus === "voll" ? `<span class="buchstabe ziel">${esc(c)}</span>` : `<span class="buchstabe luecke">b</span>`;
+    if (modus === "punkte") return `<span class="buchstabe punkt">•</span>`;
+    return `<span class="buchstabe">${esc(c)}</span>`;
+  }).join("");
+}
+function bdKnoepfe(w) {
+  const gross = zielBuchstabe(w) === zielBuchstabe(w).toUpperCase();
+  const [B, D] = gross ? ["B", "D"] : ["b", "d"];   // b immer links, d immer rechts (wie beim Bett-Trick)
+  return `<div class="bd"><button class="bd-knopf" data-b="b">${B}</button><button class="bd-knopf" data-b="d">${D}</button></div>`;
+}
+function zeigeAufgabe() {
+  const r = runde, w = aktuell();
+  r.versuch = 1; r.ersteEingabe = "";
+  let inhalt;
+  if (r.stufe === 1) inhalt = `<p class="frage">${STUFEN[1].text}</p><div><div id="anzeige" class="wort">${wortHTML(w, "punkte")}</div></div>${bdKnoepfe(w)}`;
+  else if (r.stufe === 2) inhalt = `<p class="frage">${STUFEN[2].text}</p><div><div id="anzeige" class="wort">${wortHTML(w, "luecke")}</div></div>${bdKnoepfe(w)}`;
+  else inhalt = `<p class="frage">${STUFEN[3].text}</p>
+      <div><div id="markierung" class="wort klein"></div></div>
+      <input id="eingabe" class="gross-eingabe" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <div><button id="pruefen" class="haupt">Prüfen</button></div>`;
+
+  screen().innerHTML = `
+    <div class="leiste">
+      <button class="x-knopf" id="abbrechen" aria-label="Runde beenden">✕</button>
+      <div class="fortschritt"><div style="width:${Math.round(r.pos / r.liste.length * 100)}%"></div></div>
+      <span class="zaehler">${r.pos + 1}/${r.liste.length}</span>
+    </div>
+    <div class="blatt" id="blatt">
+      <div class="emoji">${w.emoji ? esc(w.emoji) : ""}</div>
+      <button class="hoeren" id="hoeren">🔊 Anhören</button>
+      ${inhalt}
+      <div id="rueckmeldung"></div>
+    </div>`;
+
+  $("#abbrechen").onclick = () => { zeigeStart(); hochladen(); };
+  $("#hoeren").onclick = () => sprich(w.wort);
+  screen().querySelectorAll(".bd-knopf").forEach(b => b.onclick = () => antwortBD(b.dataset.b));
+  if (r.stufe === 3) {
+    $("#pruefen").onclick = pruefeEingabe;
+    $("#eingabe").onkeydown = e => { if (e.key === "Enter") pruefeEingabe(); };
+    $("#eingabe").focus();
+  }
+  if (r.stufe !== 2) sprich(w.wort);
+}
+function protokoll(w, ok, antwort, eingabe) {
+  const r = runde;
+  stand.log.push({ t: Date.now(), w: w.wort, st: r.stufe, ok, z: zielBuchstabe(w).toLowerCase(), a: antwort || "", e: eingabe || "", p: w.position });
+  if (stand.log.length > LOG_MAX) stand.log = stand.log.slice(-LOG_MAX);
+  lokalSpeichern(schueler, stand);
+  spaeterHochladen();
+  r.gesamt++;
+  if (ok) r.richtig++;
+  else if (!r.wiederholt.has(w.wort)) {              // falsches Wort kommt 3 Aufgaben später nochmal
+    r.wiederholt.add(w.wort);
+    r.liste.splice(Math.min(r.pos + 4, r.liste.length), 0, w);
+  }
+}
+function antwortBD(b) {
+  const w = aktuell();
+  const ok = b === zielBuchstabe(w).toLowerCase();
+  protokoll(w, ok, b, "");
+  zeigeRueckmeldung(ok, w, false);
+}
+function pruefeEingabe() {
+  const w = aktuell();
+  const inp = $("#eingabe").value.trim();
+  if (!inp) return;
+  const ok = inp.toLowerCase() === w.wort.toLowerCase();
+  if (runde.versuch === 1) {
+    if (ok) { protokoll(w, true, ([...inp][w.index] || "").toLowerCase(), inp); zeigeRueckmeldung(true, w, false); }
+    else { runde.ersteEingabe = inp; runde.versuch = 2; markiereFehler(inp, w); }
+  } else {
+    const erste = runde.ersteEingabe;
+    protokoll(w, false, ([...erste][w.index] || "").toLowerCase(), erste);  // gewertet wird der erste Versuch
+    zeigeRueckmeldung(ok, w, ok);
+  }
+}
+function markiereFehler(inp, w) {
+  const a = [...inp], z = zeichen(w), n = Math.max(a.length, z.length);
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    const c = a[i];
+    const falsch = !c || !z[i] || c.toLowerCase() !== z[i].toLowerCase();
+    html += `<span class="buchstabe ${falsch ? "fehler" : ""}">${c ? esc(c) : "&nbsp;"}</span>`;
+  }
+  $("#markierung").innerHTML = html;
+  $("#rueckmeldung").innerHTML = `<p>Fast! Schau dir die roten Stellen nochmal an.</p>`;
+  const bl = $("#blatt"); bl.classList.remove("wackeln"); void bl.offsetWidth; bl.classList.add("wackeln");
+  $("#eingabe").focus();
+}
+function zeigeRueckmeldung(ok, w, zweiterVersuch) {
+  screen().querySelectorAll(".bd-knopf, #pruefen, #eingabe").forEach(el => el.disabled = true);
+  const bl = $("#blatt");
+  bl.classList.add(ok ? "richtig" : "falsch");
+  if (!ok) { bl.classList.remove("wackeln"); void bl.offsetWidth; bl.classList.add("wackeln"); }
+  const anzeige = $("#anzeige");
+  if (anzeige) anzeige.innerHTML = wortHTML(w, "voll");
+  else $("#markierung").innerHTML = wortHTML(w, "voll");
+  const text = zweiterVersuch ? "Beim zweiten Versuch geschafft! 👍" : ok ? LOB[Math.floor(Math.random() * LOB.length)] : "So schreibt man es richtig.";
+  const auto = ok && !zweiterVersuch;
+  $("#rueckmeldung").innerHTML = `<p>${text}</p>${auto ? "" : `<button class="haupt" id="weiter">Weiter</button>`}`;
+  if (auto) setTimeout(weiter, 1100);
+  else { $("#weiter").onclick = weiter; $("#weiter").focus(); sprich(w.wort); }
+}
+function weiter() {
+  if (!runde) return;
+  runde.pos++;
+  if (runde.pos >= runde.liste.length) zeigeEnde();
+  else zeigeAufgabe();
+}
+function zeigeEnde() {
+  const r = runde; runde = null;
+  const q = r.gesamt ? r.richtig / r.gesamt : 0;
+  screen().innerHTML = `
+    <div class="blatt">
+      <div class="sterne">${q >= 0.9 ? "⭐⭐⭐" : q >= 0.7 ? "⭐⭐" : "⭐"}</div>
+      <p class="gruss">${r.richtig} von ${r.gesamt} richtig</p>
+      <p class="leise">${q >= 0.9 ? "Fast alles richtig!" : q >= 0.7 ? "Gut gemacht!" : "Weiter üben lohnt sich!"}</p>
+      <div class="reihe zentriert">
+        <button id="nochmal" class="haupt">Nochmal</button>
+        <button id="fertig" class="zweit">Fertig</button>
+      </div>
+    </div>`;
+  $("#nochmal").onclick = () => starteRunde(r.stufe);
+  $("#fertig").onclick = zeigeStart;
+  hochladen();
+}
+
+// ---------- Modal ----------
+function modal(html) { const m = $("#modal"); m.innerHTML = `<div class="modal-box">${html}</div>`; m.classList.remove("hidden"); }
+function modalZu() { const m = $("#modal"); m.classList.add("hidden"); m.innerHTML = ""; }
+
+// ---------- Lehrerbereich: Zugang ----------
+(() => {
+  const t = $("#titel"); let timer = null;
+  t.addEventListener("pointerdown", () => { timer = setTimeout(pinAbfrage, 900); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => t.addEventListener(ev, () => clearTimeout(timer)));
+  t.addEventListener("contextmenu", e => e.preventDefault());
+})();
+function pinAbfrage() {
+  modal(`<h2>Lehrerbereich</h2>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+    <p class="fehlertext" id="pinfehler"></p>
+    <div class="reihe zwischen"><button id="pinab" class="zweit">Abbrechen</button><button id="pinok" class="haupt">Öffnen</button></div>`);
+  const pruefen = () => {
+    if ($("#pin").value === LEHRER_PIN) { modalZu(); lehrerOeffnen(); }
+    else { $("#pinfehler").textContent = "Falsche PIN."; $("#pin").value = ""; }
+  };
+  $("#pinok").onclick = pruefen;
+  $("#pinab").onclick = modalZu;
+  $("#pin").onkeydown = e => { if (e.key === "Enter") pruefen(); };
+  $("#pin").focus();
+}
+
+// ---------- Lehrerbereich ----------
+const L = { id: null, stand: null, tab: "auswertung", zeitraum: "alle" };
+
+async function bekannteSchueler() {
+  const ids = new Set();
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith("bd_stand_")) ids.add(k.slice(9)); }
+  if (db) { try { (await fs.getDocs(fs.collection(db, SAMMLUNG))).forEach(d => ids.add(d.id)); } catch (e) { console.error(e); } }
+  if (schueler) ids.add(schueler);
+  return [...ids].sort();
+}
+async function lehrerSchuelerLaden(id) {
+  if (!id) { L.id = null; L.stand = null; return; }
+  let s = id === schueler ? stand : lokalLaden(id);
+  if (db) { try { const snap = await fs.getDoc(fs.doc(db, SAMMLUNG, id)); if (snap.exists()) s = zusammenfuehren(s, snap.data()); } catch (e) {} }
+  L.id = id; L.stand = normalisieren(s);
+}
+async function lehrerStandSpeichern() {
+  if (!L.id) return false;
+  if (L.id === schueler) { stand = zusammenfuehren(stand, L.stand); const ok = await hochladen(); L.stand = stand; return ok; }
+  const r = await syncStand(L.id, L.stand); L.stand = r.s; return r.ok;
+}
+async function lehrerOeffnen() {
+  const el = $("#lehrer");
+  el.classList.remove("hidden");
+  const tabs = [["auswertung", "📊 Auswertung"], ["einstellungen", "⚙️ Einstellungen"], ["wortliste", "📝 Wortliste"], ["daten", "💾 Daten"]];
+  el.innerHTML = `<div class="lehrer-innen">
+    <div class="reihe zwischen"><h2>Lehrerbereich</h2><button id="lzu" class="zweit">Schließen</button></div>
+    <label class="inline">Schüler <select id="lwahl"><option>lädt …</option></select></label>
+    <div class="tabs">${tabs.map(([k, t]) => `<button class="tab ${L.tab === k ? "aktiv" : ""}" data-tab="${k}">${t}</button>`).join("")}</div>
+    <div id="linhalt"></div></div>`;
+  $("#lzu").onclick = lehrerSchliessen;
+  el.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+    L.tab = b.dataset.tab;
+    el.querySelectorAll(".tab").forEach(x => x.classList.toggle("aktiv", x === b));
+    renderTab();
+  });
+  const ids = await bekannteSchueler();
+  if (!L.id || !ids.includes(L.id)) L.id = schueler || ids[0] || null;
+  await lehrerSchuelerLaden(L.id);
+  const sel = $("#lwahl");
+  sel.innerHTML = ids.length ? ids.map(id => `<option value="${esc(id)}" ${id === L.id ? "selected" : ""}>${esc(id)}</option>`).join("") : `<option value="">– noch keiner –</option>`;
+  sel.onchange = async () => { await lehrerSchuelerLaden(sel.value); renderTab(); };
+  renderTab();
+}
+function lehrerSchliessen() {
+  const el = $("#lehrer"); el.classList.add("hidden"); el.innerHTML = "";
+  if (schueler && L.id === schueler && L.stand) { stand = zusammenfuehren(stand, L.stand); lokalSpeichern(schueler, stand); }
+  if (schueler && !runde) zeigeStart();
+}
+function renderTab() {
+  const el = $("#linhalt"); if (!el) return;
+  ({ auswertung: renderAuswertung, einstellungen: renderEinstellungen, wortliste: renderWortliste, daten: renderDaten })[L.tab](el);
+}
+const keinSchueler = el => { el.innerHTML = `<div class="box"><p>Noch kein Schüler vorhanden. Sobald sich jemand mit Namen anmeldet, erscheint er hier.</p></div>`; };
+
+// Auswertung
+function renderAuswertung(el) {
+  if (!L.stand) return keinSchueler(el);
+  const grenze = L.zeitraum === "heute" ? heute0() : L.zeitraum === "woche" ? Date.now() - 7 * 864e5 : 0;
+  const log = L.stand.log.filter(e => e.t >= grenze);
+  const gruppe = key => { const m = {}; for (const e of log) { const g = m[key(e)] || (m[key(e)] = { r: 0, f: 0 }); e.ok ? g.r++ : g.f++; } return m; };
+  const nachPos = gruppe(e => e.p), nachStufe = gruppe(e => e.st);
+  const richtig = log.filter(e => e.ok).length, falsch = log.length - richtig;
+  const bStattD = log.filter(e => !e.ok && e.z === "d" && e.a === "b").length;
+  const dStattB = log.filter(e => !e.ok && e.z === "b" && e.a === "d").length;
+  const woerter = {};
+  for (const e of log) {
+    const x = woerter[e.w] || (woerter[e.w] = { r: 0, f: 0, v: [], fehl: [] });
+    if (e.ok) x.r++; else { x.f++; if (e.e) x.fehl.push(e.e); }
+    x.v.push(e.ok);
+  }
+  const quote = x => x.r / (x.r + x.f);
+  const problem = Object.entries(woerter).filter(([, x]) => x.f > 0).sort((a, b) => b[1].f - a[1].f || quote(a[1]) - quote(b[1])).slice(0, 15);
+  const zeile = (name, x) => {
+    const n = x ? x.r + x.f : 0, p = n ? x.r / n : 0;
+    return `<tr><td>${name}</td><td>${n}</td><td>${x ? x.r : 0}</td><td>${x ? x.f : 0}</td><td>${n ? Math.round(p * 100) + " %" : "–"}</td>
+      <td><div class="balken"><div style="width:${p * 100}%"></div></div></td></tr>`;
+  };
+  const kopf = `<tr><th></th><th>Aufgaben</th><th>richtig</th><th>falsch</th><th>Quote</th><th></th></tr>`;
+  const zeit = t => new Date(t).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+  el.innerHTML = `
+    <div class="box">
+      <div class="reihe zwischen">
+        <h3>Überblick: ${esc(L.id)}</h3>
+        <select id="zeitraum">
+          <option value="alle" ${L.zeitraum === "alle" ? "selected" : ""}>Gesamter Zeitraum</option>
+          <option value="woche" ${L.zeitraum === "woche" ? "selected" : ""}>Letzte 7 Tage</option>
+          <option value="heute" ${L.zeitraum === "heute" ? "selected" : ""}>Heute</option>
+        </select>
+      </div>
+      <div class="kacheln">
+        <div class="kachel"><strong>${log.length}</strong>Aufgaben</div>
+        <div class="kachel"><strong>${log.length ? Math.round(richtig / log.length * 100) + " %" : "–"}</strong>richtig</div>
+        <div class="kachel"><strong>${bStattD}</strong>b statt d</div>
+        <div class="kachel"><strong>${dStattB}</strong>d statt b</div>
+        <div class="kachel"><strong>${falsch - bStattD - dStattB}</strong>andere Fehler (Schreiben)</div>
+      </div>
+    </div>
+    <div class="box scroll"><h3>Nach Position im Wort</h3>
+      <table>${kopf}${["anfang", "mitte", "ende"].map(p => zeile(POS_NAME[p], nachPos[p])).join("")}</table></div>
+    <div class="box scroll"><h3>Nach Übungsstufe</h3>
+      <table>${kopf}${[1, 2, 3].map(s => zeile(`Stufe ${s}: ${STUFEN[s].titel}`, nachStufe[s])).join("")}</table></div>
+    <div class="box scroll"><h3>Problemwörter</h3>
+      ${problem.length ? `<table><tr><th>Wort</th><th>falsch</th><th>richtig</th><th>Verlauf (neueste rechts)</th><th>Falsch geschrieben als</th></tr>
+        ${problem.map(([w, x]) => `<tr><td><strong>${esc(w)}</strong></td><td>${x.f}</td><td>${x.r}</td>
+          <td class="verlauf">${x.v.slice(-10).map(ok => `<span class="${ok ? "p-ok" : "p-f"}"></span>`).join("")}</td>
+          <td>${esc([...new Set(x.fehl)].slice(-3).join(", "))}</td></tr>`).join("")}</table>`
+        : `<p class="hinweis">Keine Fehler im gewählten Zeitraum.</p>`}
+    </div>
+    <div class="box scroll"><h3>Letzte Antworten</h3>
+      ${log.length ? `<table><tr><th>Zeit</th><th>Wort</th><th>Stufe</th><th></th><th>Antwort</th></tr>
+        ${log.slice(-40).reverse().map(e => `<tr><td>${zeit(e.t)}</td><td>${esc(e.w)}</td><td>${e.st}</td><td>${e.ok ? "✔" : "✘"}</td>
+          <td>${esc(e.st === 3 ? e.e : e.a)}</td></tr>`).join("")}</table>`
+        : `<p class="hinweis">Noch keine Antworten.</p>`}
+    </div>`;
+  $("#zeitraum").onchange = e => { L.zeitraum = e.target.value; renderAuswertung(el); };
+}
+
+// Einstellungen
+function renderEinstellungen(el) {
+  if (!L.stand) return keinSchueler(el);
+  const e = L.stand.einstellungen;
+  const anzahl = n => WOERTER.filter(w => w.schwierigkeit <= n).length;
+  el.innerHTML = `
+    <div class="box"><h3>Freigeschaltete Stufen für ${esc(L.id)}</h3>
+      ${[1, 2, 3].map(n => `<label class="check"><input type="checkbox" value="${n}" class="st" ${e.stufen.includes(n) ? "checked" : ""}> Stufe ${n}: ${STUFEN[n].titel}</label>`).join("")}
+    </div>
+    <div class="box"><h3>Wortschwierigkeit</h3>
+      <select id="maxs">
+        ${[1, 2, 3].map(n => `<option value="${n}" ${e.maxSchwierigkeit === n ? "selected" : ""}>bis Schwierigkeit ${n} (${anzahl(n)} Wörter)</option>`).join("")}
+      </select>
+      <p class="hinweis">Voreinstellung der Liste: 1 = b/d am Wortanfang, 2 = in der Wortmitte, 3 = am Wortende oder Wort mit b und d.</p>
+    </div>
+    <div class="box"><h3>Wörter pro Runde</h3>
+      <select id="rl">${[5, 10, 15, 20].map(n => `<option value="${n}" ${e.rundenLaenge === n ? "selected" : ""}>${n}</option>`).join("")}</select>
+    </div>
+    <div class="reihe"><button id="einsave" class="haupt">Einstellungen speichern</button><span id="einmeld" class="hinweis"></span></div>`;
+  $("#einsave").onclick = async () => {
+    const stufen = [...el.querySelectorAll(".st:checked")].map(c => +c.value);
+    if (!stufen.length) { $("#einmeld").textContent = "Mindestens eine Stufe muss freigeschaltet sein."; return; }
+    L.stand.einstellungen = { stufen, maxSchwierigkeit: +$("#maxs").value, rundenLaenge: +$("#rl").value, t: Date.now() };
+    $("#einmeld").textContent = "speichert …";
+    const ok = await lehrerStandSpeichern();
+    $("#einmeld").textContent = ok ? "Gespeichert." : "Auf diesem Gerät gespeichert (keine Verbindung zu Firebase).";
+  };
+}
+
+// Daten: Export / Import / Zurücksetzen
+function download(name, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+function renderDaten(el) {
+  if (!L.stand) return keinSchueler(el);
+  el.innerHTML = `
+    <div class="box"><h3>Lernstand exportieren</h3>
+      <p class="hinweis">Lädt den Lernstand von ${esc(L.id)} als JSON-Datei herunter (${L.stand.log.length} Antworten).</p>
+      <button id="exp" class="haupt">Lernstand herunterladen</button></div>
+    <div class="box"><h3>Lernstand importieren</h3>
+      <p class="hinweis">Die Datei wird mit dem vorhandenen Stand zusammengeführt, es geht nichts verloren.</p>
+      <input type="file" id="impdatei" accept=".json,application/json" hidden>
+      <button id="imp" class="zweit">Datei auswählen</button> <span id="impmeld" class="hinweis"></span></div>
+    <div class="box"><h3>Lernstand löschen</h3>
+      <p class="hinweis">Löscht alle Antworten von ${esc(L.id)} auf allen Geräten. Die Einstellungen bleiben.</p>
+      <button id="reset" class="zweit" style="color:var(--rot);border-color:var(--rot)">Lernstand löschen</button></div>`;
+  $("#exp").onclick = () => download(`lernstand-${L.id}-${new Date().toISOString().slice(0, 10)}.json`, { ...L.stand, schueler: L.id, exportiert: Date.now() });
+  $("#imp").onclick = () => $("#impdatei").click();
+  $("#impdatei").onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      if (!Array.isArray(j.log)) throw new Error("kein Lernstand");
+      if (j.schueler && j.schueler !== L.id && !confirm(`Die Datei gehört zu „${j.schueler}“. Trotzdem in „${L.id}“ übernehmen?`)) return;
+      const vorher = L.stand.log.length;
+      L.stand = zusammenfuehren(L.stand, j);
+      const ok = await lehrerStandSpeichern();
+      $("#impmeld").textContent = `${L.stand.log.length - vorher} neue Antworten übernommen${ok ? "" : " (nur auf diesem Gerät)"}.`;
+    } catch (e) { $("#impmeld").textContent = "Die Datei ist kein gültiger Lernstand."; }
+    ev.target.value = "";
+  };
+  $("#reset").onclick = async () => {
+    if (!confirm(`Lernstand von „${L.id}“ wirklich löschen?`)) return;
+    L.stand.reset = Date.now(); L.stand.log = [];
+    await lehrerStandSpeichern();
+    renderDaten(el);
+  };
+}
+
+// Wortliste bearbeiten
+let entwurf = null;
+const ed = { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, filter: "", meldung: "" };
+function entwurfLaden() {
+  try { const e = JSON.parse(localStorage.getItem("bd_woerter_entwurf")); if (Array.isArray(e)) return e.map(eintragNormal).filter(Boolean); } catch (_) {}
+  return WOERTER.map(w => ({ ...w }));
+}
+function entwurfSpeichern() { localStorage.setItem("bd_woerter_entwurf", JSON.stringify(entwurf)); }
+function edLeeren() { Object.assign(ed, { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, meldung: "" }); }
+
+function renderWortliste(el) {
+  if (!entwurf) entwurf = entwurfLaden();
+  const geaendert = JSON.stringify(entwurf) !== JSON.stringify(WOERTER);
+  const bearbeiten = ed.bearbeite >= 0;
+  el.innerHTML = `
+    <div class="box">
+      <h3>${bearbeiten ? "Wort bearbeiten" : "Neues Wort"}</h3>
+      <label>Wort <input type="text" id="edwort" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="${esc(ed.wort)}"></label>
+      <p class="hinweis">Tippe auf den Buchstaben, der geübt werden soll:</p>
+      <div id="edbuchstaben" class="ed-buchstaben"></div>
+      <div class="reihe">
+        <label>Schwierigkeit <select id="edschw">${[1, 2, 3].map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
+        <label>Emoji (optional) <input type="text" id="edemoji" maxlength="16" value="${esc(ed.emoji)}" style="width:7em"></label>
+      </div>
+      <p id="edinfo" class="hinweis"></p>
+      <div class="reihe">
+        <button id="edok" class="haupt">${bearbeiten ? "Änderung übernehmen" : "Wort hinzufügen"}</button>
+        <button id="edabbr" class="zweit">${bearbeiten ? "Abbrechen" : "Leeren"}</button>
+      </div>
+    </div>
+    <div class="box">
+      <h3>Wortliste (${entwurf.length} Wörter)</h3>
+      <p class="hinweis">${geaendert
+        ? "⚠️ Es gibt Änderungen, die noch nicht im Repository sind. Lade die Datei herunter und ersetze damit die woerter.json im Repository."
+        : "Die Liste entspricht der woerter.json im Repository."}</p>
+      <div class="reihe">
+        <button id="edexport" class="haupt">woerter.json herunterladen</button>
+        <button id="edverwerfen" class="zweit" ${geaendert ? "" : "disabled"}>Änderungen verwerfen</button>
+      </div>
+      <p><input type="search" id="edfilter" placeholder="Wort suchen" value="${esc(ed.filter)}" style="width:100%"></p>
+      <div id="edliste"></div>
+    </div>`;
+
+  $("#edwort").oninput = e => { ed.wort = e.target.value.trim(); ed.meldung = ""; renderEdBuchstaben(); };
+  $("#edemoji").oninput = e => { ed.emoji = e.target.value; };
+  $("#edschw").onchange = e => { ed.schw = +e.target.value; ed.schwManuell = true; };
+  $("#edok").onclick = () => edUebernehmen(el);
+  $("#edabbr").onclick = () => { edLeeren(); renderWortliste(el); };
+  $("#edfilter").oninput = e => { ed.filter = e.target.value; renderEdListe(el); };
+  $("#edexport").onclick = () => download("woerter.json", { version: 1, woerter: entwurf });
+  $("#edverwerfen").onclick = () => {
+    if (!confirm("Alle Änderungen an der Wortliste verwerfen?")) return;
+    localStorage.removeItem("bd_woerter_entwurf"); entwurf = null; edLeeren(); renderWortliste(el);
+  };
+  renderEdBuchstaben();
+  renderEdListe(el);
+}
+function renderEdBuchstaben() {
+  const z = [...ed.wort];
+  const moeglich = z.map((c, i) => /[bd]/i.test(c) ? i : -1).filter(i => i >= 0);
+  if (ed.index !== null && !moeglich.includes(ed.index)) ed.index = null;
+  if (ed.index === null && moeglich.length === 1) ed.index = moeglich[0];
+  const box = $("#edbuchstaben");
+  box.innerHTML = z.length
+    ? z.map((c, i) => `<button class="ed-b ${i === ed.index ? "aktiv" : ""}" data-i="${i}" ${moeglich.includes(i) ? "" : "disabled"}>${esc(c)}</button>`).join("")
+    : `<span class="hinweis">Noch kein Wort eingegeben.</span>`;
+  box.querySelectorAll(".ed-b:not([disabled])").forEach(b => b.onclick = () => { ed.index = +b.dataset.i; renderEdBuchstaben(); });
+  if (!ed.schwManuell && ed.index !== null) ed.schw = schwVorschlag(ed.wort, ed.index);
+  $("#edschw").value = ed.schw;
+  let info = "";
+  if (z.length && !moeglich.length) info = "Das Wort enthält kein b oder d.";
+  else if (ed.index !== null) info = `Position: Wort${POS_NAME[positionVon(ed.wort, ed.index)].toLowerCase()}` + (/b/i.test(ed.wort) && /d/i.test(ed.wort) ? " · enthält b und d" : "");
+  $("#edinfo").innerHTML = ed.meldung ? `<span class="fehlertext">${esc(ed.meldung)}</span>` : info;
+}
+function edUebernehmen(el) {
+  const wort = ed.wort;
+  const fehler = m => { ed.meldung = m; renderEdBuchstaben(); };
+  if (!/^[A-Za-zÄÖÜäöüß]+$/.test(wort)) return fehler("Bitte ein einzelnes Wort ohne Leer- und Sonderzeichen eingeben.");
+  if (ed.index === null) return fehler("Bitte den b- oder d-Buchstaben antippen, der geübt werden soll.");
+  const doppelt = entwurf.findIndex(w => w.wort.toLowerCase() === wort.toLowerCase());
+  if (doppelt >= 0 && doppelt !== ed.bearbeite) return fehler("Dieses Wort steht schon in der Liste.");
+  const eintrag = { wort, index: ed.index, position: positionVon(wort, ed.index), schwierigkeit: +$("#edschw").value };
+  if (ed.emoji.trim()) eintrag.emoji = ed.emoji.trim();
+  if (ed.bearbeite >= 0) entwurf[ed.bearbeite] = eintrag; else entwurf.push(eintrag);
+  entwurfSpeichern();
+  edLeeren();
+  renderWortliste(el);
+}
+function renderEdListe(el) {
+  const f = ed.filter.trim().toLowerCase();
+  const zeilen = entwurf.map((w, i) => ({ w, i })).filter(x => x.w.wort.toLowerCase().includes(f));
+  const liste = $("#edliste");
+  liste.innerHTML = zeilen.length ? zeilen.map(({ w, i }) => `
+    <div class="ed-zeile" data-i="${i}">
+      <span class="ed-emoji">${w.emoji ? esc(w.emoji) : ""}</span>
+      <span class="ed-wort">${zeichen(w).map((c, k) => k === w.index ? `<b>${esc(c)}</b>` : esc(c)).join("")}</span>
+      <span class="tag">${POS_NAME[w.position]}</span>
+      <span class="tag">S${w.schwierigkeit}</span>
+      <button class="ed-del" data-del="${i}" aria-label="${esc(w.wort)} löschen">✕</button>
+    </div>`).join("") : `<p class="hinweis">Keine Treffer.</p>`;
+  liste.querySelectorAll(".ed-zeile").forEach(z => z.onclick = ev => {
+    if (ev.target.closest(".ed-del")) return;
+    const w = entwurf[+z.dataset.i];
+    Object.assign(ed, { wort: w.wort, index: w.index, schw: w.schwierigkeit, schwManuell: true, emoji: w.emoji || "", bearbeite: +z.dataset.i, meldung: "" });
+    renderWortliste(el);
+    $("#lehrer").scrollTo({ top: 0, behavior: "smooth" });
+  });
+  liste.querySelectorAll(".ed-del").forEach(b => b.onclick = () => {
+    const i = +b.dataset.del;
+    if (!confirm(`„${entwurf[i].wort}“ aus der Liste löschen?`)) return;
+    entwurf.splice(i, 1);
+    if (ed.bearbeite === i) edLeeren(); else if (ed.bearbeite > i) ed.bearbeite--;
+    entwurfSpeichern();
+    renderWortliste(el);
+  });
+}
+
+// ---------- Start ----------
+(async () => {
+  zeigeSync("lädt …");
+  const [, fbOk] = await Promise.all([woerterLaden(), firebaseStarten()]);
+  zeigeSync(fbOk ? "" : "nur auf diesem Gerät", fbOk ? "" : "warn");
+  const id = localStorage.getItem("bd_schueler");
+  if (id) anmelden(localStorage.getItem("bd_name") || id);
+  else zeigeAnmeldung();
+})();
+</script>
+</body>
+</html>
