@@ -34,7 +34,7 @@ Hinweis: Diese Regeln erlauben jedem, der die Projektdaten kennt, Zugriff auf di
 
 ## 3. Bedienung
 - **Lehrerbereich:** oben rechts auf 🧑‍🏫 tippen, PIN eingeben. 
-- **Stufen:** Die nächste Stufe schaltet sich automatisch frei, wenn 17 der letzten 20 Wörter der aktuellen Stufe richtig sind (änderbar über `FREI_FENSTER` und `FREI_ZIEL` in `index.html`). Im Lehrerbereich unter „Einstellungen“ lässt sich das abschalten und von Hand freischalten.
+- **Stufen:** Die nächste Stufe schaltet sich automatisch frei, wenn genug der letzten Wörter der aktuellen Stufe richtig sind (Standard: 85 % von 20). Anzahl und Prozentwerte pro Stufe lassen sich im Lehrerbereich unter „Einstellungen“ ändern. Dort lassen sich die Stufen auch zurücksetzen.
 - **Wortliste erweitern:** Lehrerbereich → Wortliste → Wort eingeben, b/d-Buchstaben antippen → „Wort hinzufügen“. Die Liste wird sofort in Firebase (`bd_woerter/liste`) gespeichert und gilt auf allen Geräten.
 - Die `woerter.json` im Repository dient nur noch als Startliste, solange in Firebase noch keine Liste existiert. „Als Datei herunterladen“ erstellt eine Sicherung, „Datei importieren“ spielt eine Sicherung wieder ein.
 - Ist Firebase nicht erreichbar, bleiben Änderungen auf dem Gerät zwischengespeichert, bis „In Firebase speichern“ klappt.
