@@ -928,7 +928,7 @@ function renderWortliste(el) {
       <div class="reihe">
         <button id="edexport" class="zweit">Als Datei herunterladen</button>
         <input type="file" id="edimpdatei" accept=".json,application/json" hidden>
-        <button id="edergaenzen" class="zweit">Wörter aus Datei ergänzen</button>
+        <button id="edergaenzen" class="zweit">Wörter aus Datei ergänzen/aktualisieren</button>
         <button id="edimport" class="zweit">Liste durch Datei ersetzen</button>
       </div>
       <p><input type="search" id="edfilter" placeholder="Wort suchen" value="${esc(ed.filter)}" style="width:100%"></p>
@@ -957,11 +957,19 @@ function renderWortliste(el) {
       const liste = (Array.isArray(j) ? j : j.woerter || []).map(eintragNormal).filter(Boolean);
       if (!liste.length) throw new Error("leer");
       if (importModus === "ergaenzen") {
-        const vorhanden = new Set(entwurf.map(w => w.wort.toLowerCase()));
-        const neu = liste.filter(w => !vorhanden.has(w.wort.toLowerCase()));
-        if (!neu.length) { ed.status = "Alle Wörter aus der Datei stehen schon in der Liste."; ev.target.value = ""; renderWortliste(el); return; }
-        if (!confirm(`${neu.length} neue Wörter zur Liste hinzufügen?`)) { ev.target.value = ""; return; }
-        entwurf = [...entwurf, ...neu];
+        // neue Wörter anhängen, vorhandene Wörter (gleiche Schreibweise) durch die Version aus der Datei ersetzen
+        const pos = new Map(entwurf.map((w, i) => [w.wort.toLowerCase(), i]));
+        const neu = [], geaendert = [];
+        for (const w of liste) {
+          const i = pos.get(w.wort.toLowerCase());
+          if (i === undefined) neu.push(w);
+          else if (JSON.stringify(entwurf[i]) !== JSON.stringify(w)) geaendert.push([i, w]);
+        }
+        if (!neu.length && !geaendert.length) { ed.status = "Die Liste enthält schon alle Wörter aus der Datei in dieser Form."; ev.target.value = ""; renderWortliste(el); return; }
+        if (!confirm(`${neu.length} neue Wörter hinzufügen und ${geaendert.length} vorhandene Wörter aktualisieren?`)) { ev.target.value = ""; return; }
+        entwurf = [...entwurf];
+        for (const [i, w] of geaendert) entwurf[i] = w;
+        entwurf.push(...neu);
       } else {
         if (!confirm(`Die aktuelle Liste (${entwurf.length} Wörter) durch die Datei (${liste.length} Wörter) ersetzen?`)) { ev.target.value = ""; return; }
         entwurf = liste;
