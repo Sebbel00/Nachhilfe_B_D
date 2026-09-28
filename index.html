@@ -168,6 +168,7 @@ const FIREBASE_CONFIG = {
 };
 const LEHRER_PIN = "2609";        // PIN für den Lehrerbereich (Knopf 🧑‍🏫 oben rechts)
 const SAMMLUNG   = "bd_trainer";  // Name der Firestore-Sammlung
+const WORT_SAMMLUNG = "bd_woerter"; // Firestore-Sammlung für die Wortliste (Dokument "liste")
 const FREI_FENSTER = 20;          // Automatisch freischalten: von den letzten 20 Wörtern einer Stufe …
 const FREI_ZIEL    = 17;          // … müssen 17 richtig sein (85 %)
 // =================================================
@@ -219,7 +220,21 @@ function eintragNormal(w) {
   if (w.emoji) e.emoji = String(w.emoji);
   return e;
 }
+let woerterQuelle = "";
 async function woerterLaden() {
+  woerterFehler = "";
+  if (db) {
+    try {
+      const snap = await fs.getDoc(fs.doc(db, WORT_SAMMLUNG, "liste"));
+      if (snap.exists()) {
+        WOERTER = (snap.data().woerter || []).map(eintragNormal).filter(Boolean);
+        woerterQuelle = "firebase";
+        if (!WOERTER.length) woerterFehler = "Die Wortliste ist leer.";
+        return;
+      }
+    } catch (e) { console.error(e); fbFehler = e.code || e.message; }
+  }
+  woerterQuelle = "datei";
   try {
     const r = await fetch("woerter.json", { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
@@ -610,6 +625,7 @@ async function lehrerOeffnen() {
     el.querySelectorAll(".tab").forEach(x => x.classList.toggle("aktiv", x === b));
     renderTab();
   });
+  await woerterLaden(); entwurf = null;
   const ids = await bekannteSchueler();
   if (!L.id || !ids.includes(L.id)) L.id = schueler || ids[0] || null;
   await lehrerSchuelerLaden(L.id);
@@ -772,17 +788,32 @@ function renderDaten(el) {
 
 // Wortliste bearbeiten
 let entwurf = null;
-const ed = { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, filter: "", meldung: "" };
+const ed = { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, filter: "", meldung: "", status: "" };
 function entwurfLaden() {
   try { const e = JSON.parse(localStorage.getItem("bd_woerter_entwurf")); if (Array.isArray(e)) return e.map(eintragNormal).filter(Boolean); } catch (_) {}
   return WOERTER.map(w => ({ ...w }));
 }
-function entwurfSpeichern() { localStorage.setItem("bd_woerter_entwurf", JSON.stringify(entwurf)); }
+async function entwurfSpeichern() {
+  localStorage.setItem("bd_woerter_entwurf", JSON.stringify(entwurf));   // Zwischenspeicher, falls Firebase nicht erreichbar ist
+  if (!db) { ed.status = "Keine Verbindung zu Firebase – Änderung nur auf diesem Gerät zwischengespeichert."; return false; }
+  try {
+    await fs.setDoc(fs.doc(db, WORT_SAMMLUNG, "liste"), { version: 1, woerter: entwurf, aktualisiert: Date.now() });
+    WOERTER = entwurf.map(w => ({ ...w }));
+    woerterQuelle = "firebase"; woerterFehler = "";
+    localStorage.removeItem("bd_woerter_entwurf");
+    ed.status = "✓ In Firebase gespeichert.";
+    return true;
+  } catch (e) {
+    console.error(e);
+    ed.status = `Firebase-Fehler: ${e.code || e.message} – Änderung nur auf diesem Gerät zwischengespeichert.`;
+    return false;
+  }
+}
 function edLeeren() { Object.assign(ed, { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, meldung: "" }); }
 
 function renderWortliste(el) {
   if (!entwurf) entwurf = entwurfLaden();
-  const geaendert = JSON.stringify(entwurf) !== JSON.stringify(WOERTER);
+  const offen = !!localStorage.getItem("bd_woerter_entwurf");
   const bearbeiten = ed.bearbeite >= 0;
   el.innerHTML = `
     <div class="box">
@@ -802,12 +833,19 @@ function renderWortliste(el) {
     </div>
     <div class="box">
       <h3>Wortliste (${entwurf.length} Wörter)</h3>
-      <p class="hinweis">${geaendert
-        ? "⚠️ Es gibt Änderungen, die noch nicht im Repository sind. Lade die Datei herunter und ersetze damit die woerter.json im Repository."
-        : "Die Liste entspricht der woerter.json im Repository."}</p>
+      <p class="hinweis">Änderungen werden sofort in Firebase gespeichert und gelten auf allen Geräten.
+        ${woerterQuelle === "datei" && !offen ? "Die Liste stammt noch aus der woerter.json. Mit der ersten Änderung (oder „In Firebase speichern“) wird sie nach Firebase übernommen." : ""}</p>
+      ${ed.status ? `<p class="${/Fehler|Keine|keine gültige/.test(ed.status) ? "fehlertext" : "hinweis"}">${esc(ed.status)}</p>` : ""}
+      ${offen ? `<p class="fehlertext">⚠️ Auf diesem Gerät gibt es Änderungen, die noch nicht in Firebase gespeichert sind.</p>` : ""}
       <div class="reihe">
-        <button id="edexport" class="haupt">woerter.json herunterladen</button>
-        <button id="edverwerfen" class="zweit" ${geaendert ? "" : "disabled"}>Änderungen verwerfen</button>
+        <button id="edsync" class="haupt">In Firebase speichern</button>
+        <button id="edverwerfen" class="zweit" ${offen ? "" : "disabled"}>Nicht gespeicherte Änderungen verwerfen</button>
+      </div>
+      <p class="hinweis" style="margin-top:14px">Sicherung:</p>
+      <div class="reihe">
+        <button id="edexport" class="zweit">Als Datei herunterladen</button>
+        <input type="file" id="edimpdatei" accept=".json,application/json" hidden>
+        <button id="edimport" class="zweit">Datei importieren</button>
       </div>
       <p><input type="search" id="edfilter" placeholder="Wort suchen" value="${esc(ed.filter)}" style="width:100%"></p>
       <div id="edliste"></div>
@@ -819,10 +857,23 @@ function renderWortliste(el) {
   $("#edok").onclick = () => edUebernehmen(el);
   $("#edabbr").onclick = () => { edLeeren(); renderWortliste(el); };
   $("#edfilter").oninput = e => { ed.filter = e.target.value; renderEdListe(el); };
-  $("#edexport").onclick = () => download("woerter.json", { version: 1, woerter: entwurf });
-  $("#edverwerfen").onclick = () => {
-    if (!confirm("Alle Änderungen an der Wortliste verwerfen?")) return;
-    localStorage.removeItem("bd_woerter_entwurf"); entwurf = null; edLeeren(); renderWortliste(el);
+  $("#edexport").onclick = () => download(`woerter-${new Date().toISOString().slice(0, 10)}.json`, { version: 1, woerter: entwurf });
+  $("#edsync").onclick = async () => { ed.status = "speichert …"; await entwurfSpeichern(); renderWortliste(el); };
+  $("#edverwerfen").onclick = async () => {
+    if (!confirm("Nicht gespeicherte Änderungen verwerfen und die Liste aus Firebase laden?")) return;
+    localStorage.removeItem("bd_woerter_entwurf"); await woerterLaden(); entwurf = null; ed.status = ""; edLeeren(); renderWortliste(el);
+  };
+  $("#edimport").onclick = () => $("#edimpdatei").click();
+  $("#edimpdatei").onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      const liste = (Array.isArray(j) ? j : j.woerter || []).map(eintragNormal).filter(Boolean);
+      if (!liste.length) throw new Error("leer");
+      if (!confirm(`Die aktuelle Liste (${entwurf.length} Wörter) durch die Datei (${liste.length} Wörter) ersetzen?`)) return;
+      entwurf = liste; edLeeren(); await entwurfSpeichern();
+    } catch (e) { ed.status = "Die Datei ist keine gültige Wortliste."; }
+    renderWortliste(el);
   };
   renderEdBuchstaben();
   renderEdListe(el);
@@ -845,6 +896,7 @@ function renderEdBuchstaben() {
   $("#edinfo").innerHTML = ed.meldung ? `<span class="fehlertext">${esc(ed.meldung)}</span>` : info;
 }
 function edUebernehmen(el) {
+  ed.status = "";
   const wort = ed.wort;
   const fehler = m => { ed.meldung = m; renderEdBuchstaben(); };
   if (!/^[A-Za-zÄÖÜäöüß]+$/.test(wort)) return fehler("Bitte ein einzelnes Wort ohne Leer- und Sonderzeichen eingeben.");
@@ -854,9 +906,10 @@ function edUebernehmen(el) {
   const eintrag = { wort, index: ed.index, position: positionVon(wort, ed.index), schwierigkeit: +$("#edschw").value };
   if (ed.emoji.trim()) eintrag.emoji = ed.emoji.trim();
   if (ed.bearbeite >= 0) entwurf[ed.bearbeite] = eintrag; else entwurf.push(eintrag);
-  entwurfSpeichern();
   edLeeren();
+  ed.status = "speichert …";
   renderWortliste(el);
+  entwurfSpeichern().then(() => { if (L.tab === "wortliste" && el.isConnected) renderWortliste(el); });
 }
 function renderEdListe(el) {
   const f = ed.filter.trim().toLowerCase();
@@ -882,15 +935,17 @@ function renderEdListe(el) {
     if (!confirm(`„${entwurf[i].wort}“ aus der Liste löschen?`)) return;
     entwurf.splice(i, 1);
     if (ed.bearbeite === i) edLeeren(); else if (ed.bearbeite > i) ed.bearbeite--;
-    entwurfSpeichern();
+    ed.status = "speichert …";
     renderWortliste(el);
+    entwurfSpeichern().then(() => { if (L.tab === "wortliste" && el.isConnected) renderWortliste(el); });
   });
 }
 
 // ---------- Start ----------
 (async () => {
   zeigeSync("lädt …");
-  const [, fbOk] = await Promise.all([woerterLaden(), firebaseStarten()]);
+  const fbOk = await firebaseStarten();
+  await woerterLaden();
   zeigeSync(fbOk ? "" : (fbFehler || "nur auf diesem Gerät – FIREBASE_CONFIG ist leer"), fbOk ? "" : "warn");
   const id = localStorage.getItem("bd_schueler");
   if (id) anmelden(localStorage.getItem("bd_name") || id);
