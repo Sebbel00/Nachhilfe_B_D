@@ -18,11 +18,14 @@ service cloud.firestore {
     match /bd_trainer/{schueler} {
       allow read, write: if true;
     }
+    match /bd_woerter/{dokument} {
+      allow read, write: if true;
+    }
   }
 }
 ```
 
-Hinweis: Diese Regeln erlauben jedem, der die Projektdaten kennt, Zugriff auf die Sammlung `bd_trainer`. Deshalb als Schülernamen am besten ein Kürzel oder nur den Vornamen verwenden.
+Hinweis: Diese Regeln erlauben jedem, der die Projektdaten kennt, Zugriff auf die Sammlungen `bd_trainer` und `bd_woerter`. Deshalb als Schülernamen am besten ein Kürzel oder nur den Vornamen verwenden.
 
 ## 2. GitHub Pages
 1. Neues Repository anlegen, `index.html` und `woerter.json` hochladen.
@@ -32,6 +35,7 @@ Hinweis: Diese Regeln erlauben jedem, der die Projektdaten kennt, Zugriff auf di
 ## 3. Bedienung
 - **Lehrerbereich:** oben rechts auf 🧑‍🏫 tippen, PIN eingeben. 
 - **Stufen:** Die nächste Stufe schaltet sich automatisch frei, wenn 17 der letzten 20 Wörter der aktuellen Stufe richtig sind (änderbar über `FREI_FENSTER` und `FREI_ZIEL` in `index.html`). Im Lehrerbereich unter „Einstellungen“ lässt sich das abschalten und von Hand freischalten.
-- **Wortliste erweitern:** Lehrerbereich → Wortliste → Wort eingeben, b/d-Buchstaben antippen → „Wort hinzufügen“ → „woerter.json herunterladen“. Im Repository: „Add file“ → „Upload files“ → Datei hochladen → „Commit changes“. Nach ca. 1–2 Minuten ist die neue Liste online.
-- Bearbeitungen an der Wortliste bleiben auf dem Gerät gespeichert, bis sie hochgeladen oder verworfen werden.
+- **Wortliste erweitern:** Lehrerbereich → Wortliste → Wort eingeben, b/d-Buchstaben antippen → „Wort hinzufügen“. Die Liste wird sofort in Firebase (`bd_woerter/liste`) gespeichert und gilt auf allen Geräten.
+- Die `woerter.json` im Repository dient nur noch als Startliste, solange in Firebase noch keine Liste existiert. „Als Datei herunterladen“ erstellt eine Sicherung, „Datei importieren“ spielt eine Sicherung wieder ein.
+- Ist Firebase nicht erreichbar, bleiben Änderungen auf dem Gerät zwischengespeichert, bis „In Firebase speichern“ klappt.
 - Neue Wörter starten ohne Lernstand. Der Lernstand hängt am Wort, nicht an der Liste.
