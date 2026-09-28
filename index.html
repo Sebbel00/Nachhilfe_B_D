@@ -65,6 +65,8 @@
   .buchstabe.luecke{min-width:.8em;background:var(--fueller-h);border-radius:10px;color:transparent}
   .buchstabe.punkt{color:#B9C6D6}
   .buchstabe.ziel{color:var(--fueller);font-weight:700;background:var(--fueller-h);border-radius:10px}
+  .buchstabe.gefuellt{color:var(--tinte);background:var(--fueller-h);border-radius:10px}
+  .buchstabe.luecke.dran{box-shadow:inset 0 0 0 3px var(--fueller)}
   .buchstabe.fehler{color:var(--rot);background:var(--rot-h);border-radius:10px;box-shadow:inset 0 -4px 0 var(--rot)}
 
   .bd{display:flex;justify-content:center;gap:26px;margin-top:4px}
@@ -186,7 +188,8 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 const screen = () => document.getElementById("screen");
 const heute0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const zeichen = w => [...w.wort];
-const zielBuchstabe = w => zeichen(w)[w.index];
+const luecken = w => w.indizes || [w.index];                       // alle Übungsbuchstaben eines Wortes
+const zielBuchstaben = w => luecken(w).map(i => zeichen(w)[i]);    // z. B. ["B", "d"]
 
 let db = null, fs = null, fbFehler = "";
 let WOERTER = [], woerterFehler = "";
@@ -205,16 +208,21 @@ async function firebaseStarten() {
 
 // ---------- Wortliste ----------
 function positionVon(wort, i) { const n = [...wort].length; return i === 0 ? "anfang" : (i === n - 1 ? "ende" : "mitte"); }
-function schwVorschlag(wort, i) {
-  if (/b/i.test(wort) && /d/i.test(wort)) return 3;
-  return { anfang: 1, mitte: 2, ende: 3 }[positionVon(wort, i)];
+function schwVorschlag(wort, idx) {
+  idx = [].concat(idx);
+  if (idx.length > 1 || (/b/i.test(wort) && /d/i.test(wort))) return 3;
+  return { anfang: 1, mitte: 2, ende: 3 }[positionVon(wort, idx[0])];
 }
 function eintragNormal(w) {
   if (!w || typeof w.wort !== "string") return null;
   const z = [...w.wort];
-  if (!Number.isInteger(w.index) || !/[bd]/i.test(z[w.index] || "")) return null;
-  const e = { wort: w.wort, index: w.index, position: positionVon(w.wort, w.index),
-    schwierigkeit: [1, 2, 3].includes(w.schwierigkeit) ? w.schwierigkeit : schwVorschlag(w.wort, w.index) };
+  const roh = Array.isArray(w.indizes) && w.indizes.length ? w.indizes : [w.index];
+  const idx = [...new Set(roh.map(Number))].filter(i => Number.isInteger(i) && /[bd]/i.test(z[i] || "")).sort((a, b) => a - b);
+  if (!idx.length) return null;
+  const e = { wort: w.wort, index: idx[0] };
+  if (idx.length > 1) e.indizes = idx;
+  e.position = positionVon(w.wort, idx[0]);
+  e.schwierigkeit = [1, 2, 3].includes(w.schwierigkeit) ? w.schwierigkeit : schwVorschlag(w.wort, idx);
   if (w.emoji) e.emoji = String(w.emoji);
   return e;
 }
@@ -438,24 +446,32 @@ function starteRunde(stufe) {
 }
 const aktuell = () => runde.liste[runde.pos];
 
-function wortHTML(w, modus) {
+function wortHTML(w, modus, eingaben = []) {
+  const lk = luecken(w);
   return zeichen(w).map((c, i) => {
-    if (i === w.index) return modus === "voll" ? `<span class="buchstabe ziel">${esc(c)}</span>` : `<span class="buchstabe luecke">b</span>`;
+    const k = lk.indexOf(i);
+    if (k >= 0) {
+      if (modus === "voll") return `<span class="buchstabe ziel">${esc(c)}</span>`;
+      if (eingaben[k]) return `<span class="buchstabe gefuellt">${esc(eingaben[k])}</span>`;
+      return `<span class="buchstabe luecke ${k === eingaben.length && lk.length > 1 ? "dran" : ""}">b</span>`;
+    }
     if (modus === "punkte") return `<span class="buchstabe punkt">•</span>`;
     return `<span class="buchstabe">${esc(c)}</span>`;
   }).join("");
 }
-function bdKnoepfe(w) {
-  const gross = zielBuchstabe(w) === zielBuchstabe(w).toUpperCase();
+function bdKnoepfe(w, k = 0) {
+  const ziel = zielBuchstaben(w)[k];
+  const gross = ziel === ziel.toUpperCase();
   const [B, D] = gross ? ["B", "D"] : ["b", "d"];   // b immer links, d immer rechts (wie beim Bett-Trick)
   return `<div class="bd"><button class="bd-knopf" data-b="b">${B}</button><button class="bd-knopf" data-b="d">${D}</button></div>`;
 }
 function zeigeAufgabe() {
   const r = runde, w = aktuell();
-  r.versuch = 1; r.ersteEingabe = "";
+  r.versuch = 1; r.ersteEingabe = ""; r.antworten = [];
   let inhalt;
-  if (r.stufe === 1) inhalt = `<p class="frage">${STUFEN[1].text}</p><div><div id="anzeige" class="wort">${wortHTML(w, "punkte")}</div></div>${bdKnoepfe(w)}`;
-  else if (r.stufe === 2) inhalt = `<p class="frage">${STUFEN[2].text}</p><div><div id="anzeige" class="wort">${wortHTML(w, "luecke")}</div></div>${bdKnoepfe(w)}`;
+  const mehrere = luecken(w).length > 1 ? ` <br><small>(${luecken(w).length} Buchstaben)</small>` : "";
+  if (r.stufe === 1) inhalt = `<p class="frage">${STUFEN[1].text}${mehrere}</p><div><div id="anzeige" class="wort">${wortHTML(w, "punkte", [])}</div></div><div id="knoepfe">${bdKnoepfe(w)}</div>`;
+  else if (r.stufe === 2) inhalt = `<p class="frage">${luecken(w).length > 1 ? "Welche Buchstaben fehlen?" : STUFEN[2].text}</p><div><div id="anzeige" class="wort">${wortHTML(w, "luecke", [])}</div></div><div id="knoepfe">${bdKnoepfe(w)}</div>`;
   else inhalt = `<p class="frage">${STUFEN[3].text}</p>
       <div><div id="markierung" class="wort klein"></div></div>
       <input id="eingabe" class="gross-eingabe" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
@@ -476,7 +492,7 @@ function zeigeAufgabe() {
 
   $("#abbrechen").onclick = () => { zeigeStart(); hochladen(); };
   $("#hoeren").onclick = () => sprich(w.wort);
-  screen().querySelectorAll(".bd-knopf").forEach(b => b.onclick = () => antwortBD(b.dataset.b));
+  knoepfeVerbinden();
   if (r.stufe === 3) {
     $("#pruefen").onclick = pruefeEingabe;
     $("#eingabe").onkeydown = e => { if (e.key === "Enter") pruefeEingabe(); };
@@ -484,9 +500,16 @@ function zeigeAufgabe() {
   }
   if (r.stufe !== 2) sprich(w.wort);
 }
+function knoepfeVerbinden() {
+  screen().querySelectorAll(".bd-knopf").forEach(b => b.onclick = () => antwortBD(b.dataset.b));
+}
 function protokoll(w, ok, antwort, eingabe) {
   const r = runde;
-  stand.log.push({ t: Date.now(), w: w.wort, st: r.stufe, ok, z: zielBuchstabe(w).toLowerCase(), a: antwort || "", e: eingabe || "", p: w.position });
+  const z = zielBuchstaben(w).map(c => c.toLowerCase()).join("");
+  const a = antwort || "";
+  const k = [...z].findIndex((c, i) => a[i] !== c);                 // erste falsche Stelle (für die Positions-Auswertung)
+  const p = positionVon(w.wort, luecken(w)[k >= 0 ? k : 0]);
+  stand.log.push({ t: Date.now(), w: w.wort, st: r.stufe, ok, z, a, e: eingabe || "", p });
   if (stand.log.length > LOG_MAX) stand.log = stand.log.slice(-LOG_MAX);
   lokalSpeichern(schueler, stand);
   spaeterHochladen();
@@ -500,22 +523,34 @@ function protokoll(w, ok, antwort, eingabe) {
   }
 }
 function antwortBD(b) {
-  const w = aktuell();
-  const ok = b === zielBuchstabe(w).toLowerCase();
-  protokoll(w, ok, b, "");
+  const r = runde, w = aktuell();
+  r.antworten.push(b);
+  const lk = luecken(w);
+  const modus = r.stufe === 1 ? "punkte" : "luecke";
+  if (r.antworten.length < lk.length) {                               // weitere Lücke offen
+    const gross = zielBuchstaben(w).map(c => c === c.toUpperCase());
+    $("#anzeige").innerHTML = wortHTML(w, modus, r.antworten.map((x, k) => gross[k] ? x.toUpperCase() : x));
+    $("#knoepfe").innerHTML = bdKnoepfe(w, r.antworten.length);
+    knoepfeVerbinden();
+    return;
+  }
+  const ziel = zielBuchstaben(w).map(c => c.toLowerCase());
+  const ok = r.antworten.every((x, k) => x === ziel[k]);
+  protokoll(w, ok, r.antworten.join(""), "");
   zeigeRueckmeldung(ok, w, false);
 }
+const kritisch = (w, text) => luecken(w).map(i => ([...text][i] || "").toLowerCase()).join("");
 function pruefeEingabe() {
   const w = aktuell();
   const inp = $("#eingabe").value.trim();
   if (!inp) return;
   const ok = inp === w.wort;   // Groß- und Kleinschreibung zählt
   if (runde.versuch === 1) {
-    if (ok) { protokoll(w, true, ([...inp][w.index] || "").toLowerCase(), inp); zeigeRueckmeldung(true, w, false); }
+    if (ok) { protokoll(w, true, kritisch(w, inp), inp); zeigeRueckmeldung(true, w, false); }
     else { runde.ersteEingabe = inp; runde.versuch = 2; markiereFehler(inp, w); }
   } else {
     const erste = runde.ersteEingabe;
-    protokoll(w, false, ([...erste][w.index] || "").toLowerCase(), erste);  // gewertet wird der erste Versuch
+    protokoll(w, false, kritisch(w, erste), erste);  // gewertet wird der erste Versuch
     zeigeRueckmeldung(ok, w, ok);
   }
 }
@@ -659,8 +694,17 @@ function renderAuswertung(el) {
   const gruppe = key => { const m = {}; for (const e of log) { const g = m[key(e)] || (m[key(e)] = { r: 0, f: 0 }); e.ok ? g.r++ : g.f++; } return m; };
   const nachPos = gruppe(e => e.p), nachStufe = gruppe(e => e.st);
   const richtig = log.filter(e => e.ok).length, falsch = log.length - richtig;
-  const bStattD = log.filter(e => !e.ok && e.z === "d" && e.a === "b").length;
-  const dStattB = log.filter(e => !e.ok && e.z === "b" && e.a === "d").length;
+  let bStattD = 0, dStattB = 0, mitVerwechslung = 0;
+  for (const e of log) {
+    if (e.ok) continue;
+    let v = false;
+    [...(e.z || "")].forEach((c, k) => {
+      const x = (e.a || "")[k];
+      if (c === "d" && x === "b") { bStattD++; v = true; }
+      if (c === "b" && x === "d") { dStattB++; v = true; }
+    });
+    if (v) mitVerwechslung++;
+  }
   const grossKlein = log.filter(e => !e.ok && e.st === 3 && e.e && e.e !== e.w && e.e.toLowerCase() === e.w.toLowerCase()).length;
   const woerter = {};
   for (const e of log) {
@@ -694,7 +738,7 @@ function renderAuswertung(el) {
         <div class="kachel"><strong>${bStattD}</strong>b statt d</div>
         <div class="kachel"><strong>${dStattB}</strong>d statt b</div>
         <div class="kachel"><strong>${grossKlein}</strong>nur Groß-/Kleinschreibung</div>
-        <div class="kachel"><strong>${falsch - bStattD - dStattB - grossKlein}</strong>andere Fehler (Schreiben)</div>
+        <div class="kachel"><strong>${falsch - mitVerwechslung - grossKlein}</strong>andere Fehler (Schreiben)</div>
       </div>
     </div>
     <div class="box scroll"><h3>Nach Position im Wort</h3>
@@ -827,7 +871,7 @@ function renderDaten(el) {
 
 // Wortliste bearbeiten
 let entwurf = null;
-const ed = { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, filter: "", meldung: "", status: "" };
+const ed = { wort: "", indizes: [], schw: 1, schwManuell: false, emoji: "", bearbeite: -1, filter: "", meldung: "", status: "" };
 function entwurfLaden() {
   try { const e = JSON.parse(localStorage.getItem("bd_woerter_entwurf")); if (Array.isArray(e)) return e.map(eintragNormal).filter(Boolean); } catch (_) {}
   return WOERTER.map(w => ({ ...w }));
@@ -848,7 +892,7 @@ async function entwurfSpeichern() {
     return false;
   }
 }
-function edLeeren() { Object.assign(ed, { wort: "", index: null, schw: 1, schwManuell: false, emoji: "", bearbeite: -1, meldung: "" }); }
+function edLeeren() { Object.assign(ed, { wort: "", indizes: [], schw: 1, schwManuell: false, emoji: "", bearbeite: -1, meldung: "" }); }
 
 function renderWortliste(el) {
   if (!entwurf) entwurf = entwurfLaden();
@@ -858,7 +902,7 @@ function renderWortliste(el) {
     <div class="box">
       <h3>${bearbeiten ? "Wort bearbeiten" : "Neues Wort"}</h3>
       <label>Wort <input type="text" id="edwort" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="${esc(ed.wort)}"></label>
-      <p class="hinweis">Tippe auf den Buchstaben, der geübt werden soll:</p>
+      <p class="hinweis">Tippe auf die Buchstaben, die geübt werden sollen (auch mehrere):</p>
       <div id="edbuchstaben" class="ed-buchstaben"></div>
       <div class="reihe">
         <label>Schwierigkeit <select id="edschw">${[1, 2, 3].map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
@@ -933,18 +977,24 @@ function renderWortliste(el) {
 function renderEdBuchstaben() {
   const z = [...ed.wort];
   const moeglich = z.map((c, i) => /[bd]/i.test(c) ? i : -1).filter(i => i >= 0);
-  if (ed.index !== null && !moeglich.includes(ed.index)) ed.index = null;
-  if (ed.index === null && moeglich.length === 1) ed.index = moeglich[0];
+  ed.indizes = ed.indizes.filter(i => moeglich.includes(i));
+  if (!ed.indizes.length && moeglich.length === 1) ed.indizes = [moeglich[0]];
   const box = $("#edbuchstaben");
   box.innerHTML = z.length
-    ? z.map((c, i) => `<button class="ed-b ${i === ed.index ? "aktiv" : ""}" data-i="${i}" ${moeglich.includes(i) ? "" : "disabled"}>${esc(c)}</button>`).join("")
+    ? z.map((c, i) => `<button class="ed-b ${ed.indizes.includes(i) ? "aktiv" : ""}" data-i="${i}" ${moeglich.includes(i) ? "" : "disabled"}>${esc(c)}</button>`).join("")
     : `<span class="hinweis">Noch kein Wort eingegeben.</span>`;
-  box.querySelectorAll(".ed-b:not([disabled])").forEach(b => b.onclick = () => { ed.index = +b.dataset.i; renderEdBuchstaben(); });
-  if (!ed.schwManuell && ed.index !== null) ed.schw = schwVorschlag(ed.wort, ed.index);
+  box.querySelectorAll(".ed-b:not([disabled])").forEach(b => b.onclick = () => {
+    const i = +b.dataset.i;
+    ed.indizes = ed.indizes.includes(i) ? ed.indizes.filter(x => x !== i) : [...ed.indizes, i].sort((a, c) => a - c);
+    renderEdBuchstaben();
+  });
+  if (!ed.schwManuell && ed.indizes.length) ed.schw = schwVorschlag(ed.wort, ed.indizes);
   $("#edschw").value = ed.schw;
   let info = "";
   if (z.length && !moeglich.length) info = "Das Wort enthält kein b oder d.";
-  else if (ed.index !== null) info = `Position: Wort${POS_NAME[positionVon(ed.wort, ed.index)].toLowerCase()}` + (/b/i.test(ed.wort) && /d/i.test(ed.wort) ? " · enthält b und d" : "");
+  else if (ed.indizes.length) info = (ed.indizes.length > 1 ? `${ed.indizes.length} Übungsbuchstaben: ` : "Position: ")
+    + ed.indizes.map(i => "Wort" + POS_NAME[positionVon(ed.wort, i)].toLowerCase()).join(", ")
+    + (/b/i.test(ed.wort) && /d/i.test(ed.wort) ? " · enthält b und d" : "");
   $("#edinfo").innerHTML = ed.meldung ? `<span class="fehlertext">${esc(ed.meldung)}</span>` : info;
 }
 function edUebernehmen(el) {
@@ -952,11 +1002,10 @@ function edUebernehmen(el) {
   const wort = ed.wort;
   const fehler = m => { ed.meldung = m; renderEdBuchstaben(); };
   if (!/^[A-Za-zÄÖÜäöüß]+$/.test(wort)) return fehler("Bitte ein einzelnes Wort ohne Leer- und Sonderzeichen eingeben.");
-  if (ed.index === null) return fehler("Bitte den b- oder d-Buchstaben antippen, der geübt werden soll.");
+  if (!ed.indizes.length) return fehler("Bitte mindestens einen b- oder d-Buchstaben antippen.");
   const doppelt = entwurf.findIndex(w => w.wort.toLowerCase() === wort.toLowerCase());
   if (doppelt >= 0 && doppelt !== ed.bearbeite) return fehler("Dieses Wort steht schon in der Liste.");
-  const eintrag = { wort, index: ed.index, position: positionVon(wort, ed.index), schwierigkeit: +$("#edschw").value };
-  if (ed.emoji.trim()) eintrag.emoji = ed.emoji.trim();
+  const eintrag = eintragNormal({ wort, indizes: ed.indizes, schwierigkeit: +$("#edschw").value, emoji: ed.emoji.trim() });
   if (ed.bearbeite >= 0) entwurf[ed.bearbeite] = eintrag; else entwurf.push(eintrag);
   edLeeren();
   ed.status = "speichert …";
@@ -970,7 +1019,7 @@ function renderEdListe(el) {
   liste.innerHTML = zeilen.length ? zeilen.map(({ w, i }) => `
     <div class="ed-zeile" data-i="${i}">
       <span class="ed-emoji">${w.emoji ? esc(w.emoji) : ""}</span>
-      <span class="ed-wort">${zeichen(w).map((c, k) => k === w.index ? `<b>${esc(c)}</b>` : esc(c)).join("")}</span>
+      <span class="ed-wort">${zeichen(w).map((c, k) => luecken(w).includes(k) ? `<b>${esc(c)}</b>` : esc(c)).join("")}</span>
       <span class="tag">${POS_NAME[w.position]}</span>
       <span class="tag">S${w.schwierigkeit}</span>
       <button class="ed-del" data-del="${i}" aria-label="${esc(w.wort)} löschen">✕</button>
@@ -978,7 +1027,7 @@ function renderEdListe(el) {
   liste.querySelectorAll(".ed-zeile").forEach(z => z.onclick = ev => {
     if (ev.target.closest(".ed-del")) return;
     const w = entwurf[+z.dataset.i];
-    Object.assign(ed, { wort: w.wort, index: w.index, schw: w.schwierigkeit, schwManuell: true, emoji: w.emoji || "", bearbeite: +z.dataset.i, meldung: "" });
+    Object.assign(ed, { wort: w.wort, indizes: [...luecken(w)], schw: w.schwierigkeit, schwManuell: true, emoji: w.emoji || "", bearbeite: +z.dataset.i, meldung: "" });
     renderWortliste(el);
     $("#lehrer").scrollTo({ top: 0, behavior: "smooth" });
   });
