@@ -30,7 +30,8 @@ Hinweis: Diese Regeln erlauben jedem, der die Projektdaten kennt, Zugriff auf di
 3. Eigene Subdomain: unter Settings → Pages → „Custom domain“ eintragen (GitHub legt dabei eine `CNAME`-Datei an). Beim Domain-Anbieter einen CNAME-Eintrag auf `<benutzername>.github.io` setzen. Danach „Enforce HTTPS“ aktivieren.
 
 ## 3. Bedienung
-- **Lehrerbereich:** lange auf die Überschrift „b oder d?“ drücken, PIN eingeben.
+- **Lehrerbereich:** oben rechts auf 🧑‍🏫 tippen, PIN eingeben. 
+- **Stufen:** Die nächste Stufe schaltet sich automatisch frei, wenn 17 der letzten 20 Wörter der aktuellen Stufe richtig sind (änderbar über `FREI_FENSTER` und `FREI_ZIEL` in `index.html`). Im Lehrerbereich unter „Einstellungen“ lässt sich das abschalten und von Hand freischalten.
 - **Wortliste erweitern:** Lehrerbereich → Wortliste → Wort eingeben, b/d-Buchstaben antippen → „Wort hinzufügen“ → „woerter.json herunterladen“. Im Repository: „Add file“ → „Upload files“ → Datei hochladen → „Commit changes“. Nach ca. 1–2 Minuten ist die neue Liste online.
 - Bearbeitungen an der Wortliste bleiben auf dem Gerät gespeichert, bis sie hochgeladen oder verworfen werden.
 - Neue Wörter starten ohne Lernstand. Der Lernstand hängt am Wort, nicht an der Liste.
