@@ -30,6 +30,9 @@
   h1{font-size:2.1rem;margin:6px 0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #sync{font-size:.85rem;color:var(--leise);text-align:right}
   #sync.ok{color:var(--gut)} #sync.warn{color:var(--rot)}
+  .kopf-rechts{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+  .lehrer-knopf{background:transparent;font-size:1.3rem;padding:2px 4px;opacity:.55}
+  .lehrer-knopf:hover{opacity:1}
 
   .haupt{background:var(--fueller);color:#fff;border-radius:14px;padding:14px 22px;font-size:1.15rem;font-weight:700}
   .zweit{background:transparent;color:var(--fueller);border:2px solid var(--fueller);border-radius:14px;padding:12px 20px;font-size:1.05rem;font-weight:700}
@@ -85,6 +88,10 @@
   .stufe{display:flex;align-items:center;gap:16px;background:#fff;border-radius:18px;padding:16px 20px;text-align:left;font-size:1.1rem;border:3px solid var(--rand)}
   .stufe .ico{font-size:40px;width:52px;text-align:center}
   .stufe strong{display:block;font-size:1.35rem}
+  .stufe .text{flex:1}
+  .mini-balken{height:12px;background:var(--rand);border-radius:99px;overflow:hidden;margin-top:8px}
+  .mini-balken div{height:100%;background:var(--gut);transition:width .4s}
+  .frei-meldung{font-size:1.3rem;font-weight:700;color:var(--gut);margin:10px 0}
   .sterne{font-size:56px}
 
   /* Modal */
@@ -137,7 +144,10 @@
 <div id="app">
   <header>
     <h1 id="titel">b oder d?</h1>
-    <span id="sync"></span>
+    <div class="kopf-rechts">
+      <span id="sync"></span>
+      <button id="lehrerknopf" class="lehrer-knopf" aria-label="Lehrerbereich">🧑‍🏫</button>
+    </div>
   </header>
   <main id="screen"></main>
 </div>
@@ -149,15 +159,17 @@
 // Firebase-Daten aus der Firebase-Konsole eintragen (Projekteinstellungen > Deine Apps > Web-App).
 // Bleibt apiKey leer, läuft alles nur lokal auf dem Gerät.
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyDI5TXV-LhyWgtbbxnrD4ut1RyG2gwC-Yc",
+  authDomain: "nachhilfe-b-d.firebaseapp.com",
+  projectId: "nachhilfe-b-d",
+  storageBucket: "nachhilfe-b-d.firebasestorage.app",
+  messagingSenderId: "221506566044",
+  appId: "1:221506566044:web:07542cc1e7d58ea6df3a59"
 };
-const LEHRER_PIN = "2609";        // PIN für den Lehrerbereich (langer Druck auf die Überschrift)
+const LEHRER_PIN = "2609";        // PIN für den Lehrerbereich (Knopf 🧑‍🏫 oben rechts)
 const SAMMLUNG   = "bd_trainer";  // Name der Firestore-Sammlung
+const FREI_FENSTER = 20;          // Automatisch freischalten: von den letzten 20 Wörtern einer Stufe …
+const FREI_ZIEL    = 17;          // … müssen 17 richtig sein (85 %)
 // =================================================
 
 const FB_VERSION = "10.12.2";
@@ -221,7 +233,7 @@ async function woerterLaden() {
 }
 
 // ---------- Lernstand ----------
-const leererStand = () => ({ version: 1, reset: 0, log: [], einstellungen: { stufen: [1], maxSchwierigkeit: 1, rundenLaenge: 10, t: 0 } });
+const leererStand = () => ({ version: 1, reset: 0, log: [], einstellungen: { stufen: [1], maxSchwierigkeit: 1, rundenLaenge: 10, auto: true, t: 0 } });
 function normalisieren(s) {
   const l = leererStand();
   if (!s || typeof s !== "object") return l;
@@ -325,8 +337,33 @@ async function anmelden(name) {
   await hochladen();
   if (!runde && $("#lehrer").classList.contains("hidden")) zeigeStart();
 }
+// Fortschritt zum Freischalten von Stufe n (zählt die letzten Antworten in Stufe n-1)
+function fortschrittFuer(n) {
+  const letzte = stand.log.filter(e => e.st === n - 1).slice(-FREI_FENSTER);
+  return Math.min(letzte.filter(e => e.ok).length, FREI_ZIEL);
+}
+function pruefeFreischaltung() {
+  const e = stand.einstellungen;
+  if (!e.auto) return null;
+  let neu = null;
+  for (const n of [2, 3]) {
+    if (e.stufen.includes(n) || !e.stufen.includes(n - 1)) continue;
+    if (fortschrittFuer(n) >= FREI_ZIEL) { e.stufen = [...e.stufen, n].sort(); e.t = Date.now(); neu = n; }
+  }
+  if (neu) { lokalSpeichern(schueler, stand); spaeterHochladen(); }
+  return neu;
+}
+function sperrHinweis(n) {
+  const e = stand.einstellungen;
+  if (!e.auto) return `<span class="leise">Wird von deinem Lehrer freigeschaltet.</span>`;
+  if (!e.stufen.includes(n - 1)) return `<span class="leise">Kommt nach Stufe ${n - 1}.</span>`;
+  const f = fortschrittFuer(n), fehlt = FREI_ZIEL - f;
+  return `<span class="leise">Noch ${fehlt} richtige ${fehlt === 1 ? "Wort" : "Wörter"} in Stufe ${n - 1}</span>
+    <div class="mini-balken"><div style="width:${Math.round(f / FREI_ZIEL * 100)}%"></div></div>`;
+}
 function zeigeStart() {
   runde = null;
+  pruefeFreischaltung();
   const e = stand.einstellungen;
   screen().innerHTML = `
     <p class="gruss">Hallo ${esc(anzeigeName)}!</p>
@@ -337,7 +374,7 @@ function zeigeStart() {
         const s = STUFEN[n], frei = e.stufen.includes(n);
         return `<button class="stufe" data-stufe="${n}" ${frei ? "" : "disabled"}>
           <span class="ico">${frei ? s.ico : "🔒"}</span>
-          <span><strong>Stufe ${n}: ${s.titel}</strong>${s.text}</span></button>`;
+          <span class="text"><strong>Stufe ${n}: ${s.titel}</strong>${frei ? s.text : sperrHinweis(n)}</span></button>`;
       }).join("")}
     </div>
     <div class="reihe zentriert">
@@ -433,6 +470,8 @@ function protokoll(w, ok, antwort, eingabe) {
   lokalSpeichern(schueler, stand);
   spaeterHochladen();
   r.gesamt++;
+  const neu = pruefeFreischaltung();
+  if (neu) r.neuFrei = neu;
   if (ok) r.richtig++;
   else if (!r.wiederholt.has(w.wort)) {              // falsches Wort kommt 3 Aufgaben später nochmal
     r.wiederholt.add(w.wort);
@@ -500,6 +539,9 @@ function zeigeEnde() {
       <div class="sterne">${q >= 0.9 ? "⭐⭐⭐" : q >= 0.7 ? "⭐⭐" : "⭐"}</div>
       <p class="gruss">${r.richtig} von ${r.gesamt} richtig</p>
       <p class="leise">${q >= 0.9 ? "Fast alles richtig!" : q >= 0.7 ? "Gut gemacht!" : "Weiter üben lohnt sich!"}</p>
+      ${r.neuFrei ? `<p class="frei-meldung">🎉 Stufe ${r.neuFrei} ist jetzt freigeschaltet!</p>`
+        : (!stand.einstellungen.stufen.includes(r.stufe + 1) && r.stufe < 3 && stand.einstellungen.auto)
+          ? `<div style="max-width:360px;margin:10px auto 16px;text-align:left">${sperrHinweis(r.stufe + 1)}</div>` : ""}
       <div class="reihe zentriert">
         <button id="nochmal" class="haupt">Nochmal</button>
         <button id="fertig" class="zweit">Fertig</button>
@@ -515,12 +557,7 @@ function modal(html) { const m = $("#modal"); m.innerHTML = `<div class="modal-b
 function modalZu() { const m = $("#modal"); m.classList.add("hidden"); m.innerHTML = ""; }
 
 // ---------- Lehrerbereich: Zugang ----------
-(() => {
-  const t = $("#titel"); let timer = null;
-  t.addEventListener("pointerdown", () => { timer = setTimeout(pinAbfrage, 900); });
-  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => t.addEventListener(ev, () => clearTimeout(timer)));
-  t.addEventListener("contextmenu", e => e.preventDefault());
-})();
+$("#lehrerknopf").onclick = pinAbfrage;
 function pinAbfrage() {
   modal(`<h2>Lehrerbereich</h2>
     <input id="pin" type="password" inputmode="numeric" autocomplete="off">
@@ -664,6 +701,10 @@ function renderEinstellungen(el) {
     <div class="box"><h3>Freigeschaltete Stufen für ${esc(L.id)}</h3>
       ${[1, 2, 3].map(n => `<label class="check"><input type="checkbox" value="${n}" class="st" ${e.stufen.includes(n) ? "checked" : ""}> Stufe ${n}: ${STUFEN[n].titel}</label>`).join("")}
     </div>
+    <div class="box"><h3>Automatisch freischalten</h3>
+      <label class="check"><input type="checkbox" id="auto" ${e.auto ? "checked" : ""}> Nächste Stufe freischalten, wenn ${FREI_ZIEL} der letzten ${FREI_FENSTER} Wörter richtig sind</label>
+      <p class="hinweis">Ausgeschaltet schaltest du die Stufen nur oben von Hand frei.</p>
+    </div>
     <div class="box"><h3>Wortschwierigkeit</h3>
       <select id="maxs">
         ${[1, 2, 3].map(n => `<option value="${n}" ${e.maxSchwierigkeit === n ? "selected" : ""}>bis Schwierigkeit ${n} (${anzahl(n)} Wörter)</option>`).join("")}
@@ -677,7 +718,7 @@ function renderEinstellungen(el) {
   $("#einsave").onclick = async () => {
     const stufen = [...el.querySelectorAll(".st:checked")].map(c => +c.value);
     if (!stufen.length) { $("#einmeld").textContent = "Mindestens eine Stufe muss freigeschaltet sein."; return; }
-    L.stand.einstellungen = { stufen, maxSchwierigkeit: +$("#maxs").value, rundenLaenge: +$("#rl").value, t: Date.now() };
+    L.stand.einstellungen = { stufen, maxSchwierigkeit: +$("#maxs").value, rundenLaenge: +$("#rl").value, auto: $("#auto").checked, t: Date.now() };
     $("#einmeld").textContent = "speichert …";
     const ok = await lehrerStandSpeichern();
     $("#einmeld").textContent = ok ? "Gespeichert." : "Auf diesem Gerät gespeichert (keine Verbindung zu Firebase).";
