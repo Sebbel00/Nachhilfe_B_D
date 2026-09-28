@@ -189,7 +189,7 @@ const heute0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.ge
 const zeichen = w => [...w.wort];
 const zielBuchstabe = w => zeichen(w)[w.index];
 
-let db = null, fs = null;
+let db = null, fs = null, fbFehler = "";
 let WOERTER = [], woerterFehler = "";
 let schueler = null, anzeigeName = "", stand = null, runde = null;
 
@@ -201,7 +201,7 @@ async function firebaseStarten() {
     fs = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-firestore.js`);
     db = fs.getFirestore(appMod.initializeApp(FIREBASE_CONFIG));
     return true;
-  } catch (e) { console.error(e); db = null; return false; }
+  } catch (e) { console.error(e); db = null; fbFehler = "Firebase konnte nicht geladen werden"; return false; }
 }
 
 // ---------- Wortliste ----------
@@ -265,8 +265,9 @@ async function syncStand(id, s) {
     if (snap.exists()) s = zusammenfuehren(s, snap.data());
     await fs.setDoc(ref, { ...s, aktualisiert: Date.now() });
     lokalSpeichern(id, s);
+    fbFehler = "";
     return { s, ok: true };
-  } catch (e) { console.error(e); return { s, ok: false }; }
+  } catch (e) { console.error(e); fbFehler = e.code || e.message || "unbekannter Fehler"; return { s, ok: false }; }
 }
 function zeigeSync(text, cls = "") { const el = $("#sync"); el.textContent = text; el.className = cls; }
 async function hochladen() {
@@ -276,7 +277,7 @@ async function hochladen() {
   stand = zusammenfuehren(stand, r.s);   // Antworten, die während des Speicherns dazukamen, bleiben erhalten
   lokalSpeichern(schueler, stand);
   if (r.ok) zeigeSync("✓ gespeichert", "ok");
-  else zeigeSync(db ? "offline – auf dem Gerät gespeichert" : "nur auf diesem Gerät", "warn");
+  else zeigeSync(fbFehler ? `Firebase-Fehler: ${fbFehler}` : "nur auf diesem Gerät", "warn");
   return r.ok;
 }
 let hochTimer = null;
@@ -890,7 +891,7 @@ function renderEdListe(el) {
 (async () => {
   zeigeSync("lädt …");
   const [, fbOk] = await Promise.all([woerterLaden(), firebaseStarten()]);
-  zeigeSync(fbOk ? "" : "nur auf diesem Gerät", fbOk ? "" : "warn");
+  zeigeSync(fbOk ? "" : (fbFehler || "nur auf diesem Gerät – FIREBASE_CONFIG ist leer"), fbOk ? "" : "warn");
   const id = localStorage.getItem("bd_schueler");
   if (id) anmelden(localStorage.getItem("bd_name") || id);
   else zeigeAnmeldung();
